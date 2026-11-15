@@ -3,6 +3,7 @@
 本仓库是对哈佛 CS2680《Modern AI Systems: Agents and System Optimizations》(Modern AI 系统:智能体与系统优化,主讲:Juncheng Yang)课程幻灯片的个人学习笔记。
 
 - 中文学习材料(课程主线、14 周路线、五个作业、全栈概念、参照实现说明):[CS2680-学习材料.md](CS2680-学习材料.md)
+- 每个 PDF 对应的详细中文笔记(逐讲逐页展开):[notes/](notes/)
 - 参照实现:`mads/` 包 —— 确定性模拟的 Mads 全栈(Agent Loop / 上下文 / 批处理 / 分页 KV / 投机解码),五个作业各对应一个模块
 - 基准:`bash autoresearch.sh` 跑 16 任务工作负载并打印 METRIC 行(主指标 `e2e_latency_s`,正确性门 16/16 任务完成)
 
@@ -16,17 +17,23 @@
 
 原始幻灯片 PDF 经讲师许可收录在本仓库。
 
-| 讲次 | PDF |
-|---|---|
-| 1. 课程导论 | [1_intro.pdf](1_intro.pdf) |
-| 2. 用户视角的智能体 I | [2_agent_use_1.pdf](2_agent_use_1.pdf) |
-| 3. 用户视角的智能体 II | [3_agent_use_2.pdf](3_agent_use_2.pdf) |
-| 4. 智能体设计 I | [4_agent_design_1.pdf](4_agent_design_1.pdf) |
-| 5. 智能体设计 II | [5_agent_design_2.pdf](5_agent_design_2.pdf) |
-| 6. 智能体设计 III | [6_agent_design_3.pdf](6_agent_design_3.pdf) |
-| 7. 智能体设计 IV | [7_agent_design_4.pdf](7_agent_design_4.pdf) |
-| 8. 智能体设计 V | [8_agent_design_5.pdf](8_agent_design_5.pdf) |
-| 作业 3 | [8_assignment3.pdf](8_assignment3.pdf) |
+| 讲次 | PDF | 中文笔记 |
+|---|---|---|
+| 1. 课程导论 | [1_intro.pdf](1_intro.pdf) | [notes/1_intro.md](notes/1_intro.md) |
+| 2. 用户视角的智能体 I | [2_agent_use_1.pdf](2_agent_use_1.pdf) | [notes/2_agent_use_1.md](notes/2_agent_use_1.md) |
+| 3. 用户视角的智能体 II | [3_agent_use_2.pdf](3_agent_use_2.pdf) | [notes/3_agent_use_2.md](notes/3_agent_use_2.md) |
+| 4. 智能体设计 I | [4_agent_design_1.pdf](4_agent_design_1.pdf) | [notes/4_agent_design_1.md](notes/4_agent_design_1.md) |
+| 5. 智能体设计 II | [5_agent_design_2.pdf](5_agent_design_2.pdf) | [notes/5_agent_design_2.md](notes/5_agent_design_2.md) |
+| 6. 智能体设计 III | [6_agent_design_3.pdf](6_agent_design_3.pdf) | [notes/6_agent_design_3.md](notes/6_agent_design_3.md) |
+| 7. 智能体设计 IV | [7_agent_design_4.pdf](7_agent_design_4.pdf) | [notes/7_agent_design_4.md](notes/7_agent_design_4.md) |
+| 8. 智能体设计 V | [8_agent_design_5.pdf](8_agent_design_5.pdf) | [notes/8_agent_design_5.md](notes/8_agent_design_5.md) |
+| 作业 3 | [8_assignment3.pdf](8_assignment3.pdf) | [notes/8_assignment3.md](notes/8_assignment3.md) |
+| 9. LLM 服务基础 I | [9_llm_serving_basics_1.pdf](9_llm_serving_basics_1.pdf) | [notes/9_llm_serving_basics_1.md](notes/9_llm_serving_basics_1.md) |
+| 10a. LLM 服务基础 IIa | [10_llm_serving_basics_2a.pdf](10_llm_serving_basics_2a.pdf) | [notes/10_llm_serving_basics_2a.md](notes/10_llm_serving_basics_2a.md) |
+| 10b. LLM 服务基础 IIb(引介 GPU) | [10_llm_serving_basics_2b.pdf](10_llm_serving_basics_2b.pdf) | [notes/10_llm_serving_basics_2b.md](notes/10_llm_serving_basics_2b.md) |
+| 11. LLM 服务基础 III | [11_llm_serving_basics_3.pdf](11_llm_serving_basics_3.pdf) | [notes/11_llm_serving_basics_3.md](notes/11_llm_serving_basics_3.md) |
+| 作业 4 | [assignment4.pdf](assignment4.pdf) | [notes/assignment4.md](notes/assignment4.md) |
+| 作业反馈讲次 | [feedback_assignment.pdf](feedback_assignment.pdf) | [notes/feedback_assignment.md](notes/feedback_assignment.md) |
 
 ## 1. 课程导论(50 页)
 
