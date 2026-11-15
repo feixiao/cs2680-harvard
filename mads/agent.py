@@ -2,7 +2,10 @@
 
 ``concurrency`` is how many tasks advance at once; each task issues at most
 one model request at a time, and all in-flight requests from a round are
-batched by the engine (prefill FIFO, then continuous-batching decode).
+batched by the engine (prefill FIFO, then continuous-batching decode). The
+round barrier is a max, not a sum: retry backoffs and tool I/O of
+different agents overlap on the shared clock (independent I/O), so a round
+costs the slowest agent's wait, not the sum of everyone's.
 """
 
 from .agent_loop import Agent, AgentConfig, DONE, FAILED
@@ -39,8 +42,21 @@ def run_workload(tasks, config=None):
             engine.run_batch([a.request for a in pending])
             for a in pending:
                 a.receive()
-        for a in active:
-            if a.state == "RUN_TOOLS":
+            # Retry backoffs of different agents overlap.
+            w = max((a.wait for a in pending), default=0.0)
+            if w:
+                clock.advance(w)
+            for a in pending:
+                a.finish_wait()
+        running = [a for a in active if a.state == "RUN_TOOLS"]
+        if running:
+            # Tool I/O of different agents overlaps: the shared clock
+            # advances once by the round maximum, then all agents
+            # record their results.
+            barrier = max(a.tool_dt() for a in running)
+            if barrier:
+                clock.advance(barrier)
+            for a in running:
                 a.run_tools()
         active = [a for a in active if a.state not in (DONE, FAILED)]
     else:
