@@ -1,4 +1,7 @@
-# 作业 4：MadsServe —— 拥有自己的推理引擎（Assignment 4: MadsServe: Own the Serving Engine）
+# 作业 4(MadsServe: Own the Serving Engine)
+
+> **Assignment 4: MadsServe: Own the Serving Engine** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[assignment4.pdf](../assignment4.pdf)
 
 ## 本讲概览
 

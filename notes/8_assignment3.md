@@ -1,4 +1,7 @@
-# 作业 3:MadsOpt 智能体 Harness 竞赛
+# 作业 3:智能体 Harness 竞赛
+
+> **MadsOpt** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[8_assignment3.pdf](../8_assignment3.pdf)
 
 ## 本讲概览
 
@@ -8,9 +11,13 @@ MadsOpt 是一个智能体 (agent) harness 竞赛:你的 Agent 与 26 个任务�
 
 - 共 26 个任务,分 3 种容器类型 (3 types of containers)。
 - Agent 与任务在不同容器中,用 HTTP 请求访问任务;评测离线,只能访问 api.cs2680.com。
-- 图示:框架图为 Agent 容器 ⇄ 任务容器 (HTTP),Agent 出站到 api.cs2680.com 调用模型。
-- 工作流:Dispatcher 把任务信息传给你的 Agent → Agent 工作并生成 patch → patch 被评测,结果回传 Agent。
+- 工作流:
+  - Dispatcher 把任务信息传给你的 Agent
+  - Agent 工作并生成 patch
+  - patch 被评测,结果回传 Agent
 - 并发上限:最多 5 个任务并行 (5 task in parallel at most)——并行编排直接影响每任务的时间与成本。
+
+> **图示** 框架图为 Agent 容器 ⇄ 任务容器 (HTTP),Agent 出站到 api.cs2680.com 调用模型。
 
 ## 限额 (Limits)
 
@@ -42,8 +49,13 @@ MadsOpt 是一个智能体 (agent) harness 竞赛:你的 Agent 与 26 个任务�
 - 登录:Canvas 邮箱,密码 `Cs2680-<your 8-digit student ID>` (即 `Cs2680-` + 8 位学号)。
 - 提交物:上传 `src.zip`。
 - 提交排队逐个运行;若提交看起来不靠谱,尽快取消。
-- **取消的提交同样计入统计,并消耗当日预算**——本地验证必须先于提交。
-- 衡量三指标:① 解出任务数;② 每解出任务成本;③ 每解出任务时间。
+
+> **取消的提交同样计入统计,并消耗当日预算**——本地验证必须先于提交。
+
+- 衡量三指标:
+  - 解出任务数
+  - 每解出任务成本
+  - 每解出任务时间
 
 ## 评分规则 (Grading)
 
@@ -51,8 +63,16 @@ MadsOpt 是一个智能体 (agent) harness 竞赛:你的 Agent 与 26 个任务�
 - 门槛:至少解出 7 个任务 (at least solve 7 tasks) 才有名次。
 - 名次计「排在你前面的所有人」,幻灯片示例:1, 1, 1, 4, …(并列共享名次,下一位 = 前面人数 + 1)。
 - 基线:解出 16 个任务。
-- 分数:任一提交达到基线 → `max(81 − r, 50)`;否则 → `81 − r`(r 为天际线名次)。达到基线后名次再落后也有 50 分下限保护。
-- 成绩构成:Leaderboard 80 分 + writeup 10 分 + 视频 10 分。
+- 分数:
+  - 任一提交达到基线 → `max(81 − r, 50)`
+  - 否则 → `81 − r`(r 为天际线名次)
+
+> **达到基线后名次再落后也有 50 分下限保护。**
+
+- 成绩构成:
+  - Leaderboard 80 分
+  - writeup 10 分
+  - 视频 10 分
 
 ## 核心要点
 

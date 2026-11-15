@@ -1,6 +1,7 @@
-# 第3讲:用户视角的智能体 II(多智能体与最佳实践)
+# 第 3 讲：用户视角的智能体 II(多智能体与最佳实践)
 
-> 原讲名:*Agent From a User's Perspective II: Multi-agent and Best Practice*(Harvard CS2680 Modern AI Systems: Agents and System Optimizations,主讲 Juncheng Yang)
+> **Agent From a User's Perspective II: Multi-agent and Best Practice** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[3_agent_use_2.pdf](../3_agent_use_2.pdf)
 
 ## 本讲概览
 

@@ -1,6 +1,7 @@
-# 第5讲：智能体设计 II（多智能体系统）
+# 第 5 讲：智能体设计 II(多智能体系统)
 
-> 原讲次：*Agent Design II: Multi-Agent Systems*，Harvard CS2680 *Modern AI Systems: Agents and System Optimizations*（Juncheng Yang）
+> **Agent Design II: Multi-Agent Systems** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[5_agent_design_2.pdf](../5_agent_design_2.pdf)
 
 ## 本讲概览
 

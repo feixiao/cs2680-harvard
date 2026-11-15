@@ -1,4 +1,7 @@
-# 智能体设计 V:高性价比智能体(Agent design V: cost-effective agents)
+# 智能体设计 V(高性价比智能体)
+
+> **Agent Design V: Cost-effective Agents** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[8_agent_design_5.pdf](../8_agent_design_5.pdf)
 
 ## 本讲概览
 

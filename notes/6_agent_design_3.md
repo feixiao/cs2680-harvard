@@ -1,6 +1,7 @@
-# 第6讲：智能体设计 III（记忆与可靠性）
+# 第 6 讲：智能体设计 III(记忆与可靠性)
 
-> 原讲名：Agent Design III: Memory, and Reliability — Modern AI Systems: Agents and System Optimizations（Harvard CS2680, Juncheng Yang）
+> **Agent Design III: Memory, and Reliability** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[6_agent_design_3.pdf](../6_agent_design_3.pdf)
 
 ## 本讲概览
 

@@ -1,6 +1,7 @@
-# 第 2 讲：用户视角的智能体 I —— Claude Code 如何工作
+# 第 2 讲：用户视角的智能体 I(Claude Code 如何工作)
 
-> 原讲义：*Agent From a User's Perspective I: How Claude Code Works*（Harvard CS2680 Modern AI Systems: Agents and System Optimizations，Juncheng Yang）
+> **Agent From a User's Perspective I: How Claude Code Works** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[2_agent_use_1.pdf](../2_agent_use_1.pdf)
 
 ## 本讲概览
 

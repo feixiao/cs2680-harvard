@@ -1,4 +1,7 @@
-# 第7讲：智能体设计 IV：评测 (Agent Design IV: Evaluation)
+# 第 7 讲：智能体设计 IV(评测)
+
+> **Agent Design IV: Evaluation** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[7_agent_design_4.pdf](../7_agent_design_4.pdf)
 
 ## 本讲概览
 

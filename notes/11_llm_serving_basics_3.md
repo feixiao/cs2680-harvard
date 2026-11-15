@@ -1,6 +1,7 @@
-# 第 11 讲：LLM 服务基础 III —— 调度、分页与并行
+# 第 11 讲：LLM 服务基础 III(调度、分页与并行)
 
-> 原题：*LLM Serving Basics III: Scheduling, Paging and Parallelism*（Harvard CS2680 MaDSys，Juncheng Yang）
+> **LLM Serving Basics III: Scheduling, Paging and Parallelism** · Harvard CS2680 · 讲师 Juncheng Yang
+> 原始幻灯片:[11_llm_serving_basics_3.pdf](../11_llm_serving_basics_3.pdf)
 
 ## 本讲概览
 
