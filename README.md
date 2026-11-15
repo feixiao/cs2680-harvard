@@ -2,6 +2,10 @@
 
 Personal study notes summarizing the lecture slides for Harvard CS2680, *Modern AI Systems: Agents and System Optimizations* (instructor: Juncheng Yang).
 
+- 中文学习材料（课程主线、14 周路线、五个作业、全栈概念、参照实现说明）：[CS2680-学习材料.md](CS2680-学习材料.md)
+- 参照实现：`mads/` 包 —— 确定性模拟的 Mads 全栈（Agent Loop / 上下文 / 批处理 / 分页 KV / 投机解码），五个作业各对应一个模块
+- 基准：`bash autoresearch.sh` 跑 16 任务工作负载并打印 METRIC 行（主指标 `e2e_latency_s`，正确性门 16/16 任务完成）
+
 ## Course links
 
 - Course website: https://cs2680.com
