@@ -131,9 +131,10 @@ class Agent:
 
     def receive(self) -> None:
         """The engine finished the request. Record it and decide the next
-        action. Clock time (retry backoff) is deferred to the driver, which
-        advances once by the round maximum so that different agents'
-        backoffs and tool I/O overlap instead of summing."""
+        action. The decision is immediate (no clock); the driver then
+        schedules the follow-up work — retry backoff or tool I/O — to
+        become ready after its delay, running concurrently with other
+        agents' GPU work on the shared clock."""
         self.lens.record_request(self.task_idx, self.request)
         self.wait = 0.0
         if self.request.failed:
@@ -143,6 +144,7 @@ class Agent:
                 self.lens.set_status(self.task_idx, FAILED)
                 return
             self.wait = 0.5 * (2 ** (self.attempt - 1))  # backoff
+            self.submit()  # retry the same step; ready after the backoff
             return
         step = self.task.steps[self.step_idx]
         self.messages.append(Message("assistant", self.request.out_tokens, len(self.messages)))
@@ -152,24 +154,18 @@ class Agent:
             return
         self.state = RUN_TOOLS
 
-    def finish_wait(self) -> None:
-        """Called after the driver advanced the clock for the round."""
-        if self.state == AWAIT_MODEL:
-            self.submit()
-        self.wait = 0.0
-
     def tool_dt(self) -> float:
         """Time this agent's tool calls take. ``parallel_tools`` overlaps
-        the calls of one agent; the driver additionally overlaps the tools
-        of different agents (independent I/O, shared clock = round max)."""
+        the calls of one agent; the tools of different agents overlap on
+        the shared clock (independent I/O) — they never block the GPU."""
         step = self.task.steps[self.step_idx]
         dts = [step.tool_dt_ms for _ in range(step.n_calls)]
         return (max(dts) if self.config.parallel_tools else sum(dts)) / 1000.0
 
     def run_tools(self) -> None:
-        """Append tool results and advance the step. The driver advances
-        the shared clock once per round (max over agents); tools of all
-        agents in a round overlap on that clock."""
+        """Append tool results and advance the step (pure bookkeeping, no
+        clock). The tool I/O time elapses on the shared clock via the
+        driver's schedule while the GPU keeps serving other agents."""
         step = self.task.steps[self.step_idx]
         for c in range(step.n_calls):
             toks = gen_tokens("%s:%d:call:%d" % (self.task.task_id, self.step_idx, c), step.tool_toks)

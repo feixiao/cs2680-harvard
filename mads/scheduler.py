@@ -65,24 +65,89 @@ class ServingEngine:
         kv_budget = max(0.0, gpu_gb - sum(m.weights_gb for m in resident) - kv_headroom_gb) * (1 << 30)
         self.kv = PagedKVCache(int(kv_budget))
 
-    def run_batch(self, reqs):
-        if not reqs:
-            return
-        for r in reqs:
-            self._prefill(r, split=min(self.tp_size, len(reqs)))
-        for r in reqs:
-            rng = random.Random(r.seed_key + ":status")
-            r.failed = rng.random() < self.error_rate
-        live = []
-        for r in reqs:
-            if r.failed:
+    def run_events(self, ready, on_complete):
+        """Event-driven continuous batching (week 14: agent request
+        scheduling).
+
+        ``ready`` is a list of ``(ready_time, seq, agent)``; each agent's
+        pending work is ``agent.request``. When a request finishes,
+        ``on_complete(request)`` is called at its finish time and returns
+        ``(delay, agent, seq)`` entries for follow-up work — tool I/O and
+        retry backoffs run concurrently with other in-flight GPU work on
+        the shared clock instead of a round barrier. New requests are
+        prefilled and join the decode batch mid-flight, so the GPU never
+        idles while work is running or queued.
+        """
+        ready.sort()
+        live = []       # local requests mid-decode
+        remote = []     # (complete_time, request): opaque API calls, GPU-free
+        eps = 1e-9
+
+        def due(t):
+            return t <= self.clock.t + eps
+
+        def settle(r):
+            for delay, a, s in on_complete(r):
+                ready.append((self.clock.t + delay, s, a))
+            # keep the queue ordered; seq makes the order total
+            if len(ready) > 1:
+                ready.sort()
+
+        def admit():
+            arrivals = []
+            while ready and due(ready[0][0]):
+                arrivals.append(ready.pop(0))
+            if not arrivals:
+                return
+            split = min(self.tp_size, len(arrivals))
+            for _, s, a in arrivals:
+                r = a.request
+                r.agent = a
+                self._prefill(r, split=split)
+                rng = random.Random(r.seed_key + ":status")
+                r.failed = rng.random() < self.error_rate
+                if r.failed:
+                    self._charge(r)
+                    settle(r)
+                else:
+                    r.out_tokens = gen_tokens(r.seed_key + ":out", r.max_new)
+                    r.spec_pos = 0
+                    if self.models[r.model].local:
+                        live.append(r)
+                    else:
+                        dt = len(r.out_tokens) * self.models[r.model].decode_ms_per_tok / 1000.0
+                        r.dt += dt
+                        remote.append((self.clock.t + dt, r))
+                        remote.sort()
+
+        for _ in range(500_000):
+            while remote and due(remote[0][0]):
+                r = remote.pop(0)[1]
+                self._charge(r)
+                settle(r)
+            admit()
+            while remote and due(remote[0][0]):
+                r = remote.pop(0)[1]
+                self._charge(r)
+                settle(r)
+            if not live:
+                if not remote and not ready:
+                    break
+                t = min(([remote[0][0]] if remote else []) +
+                        ([ready[0][0]] if ready else []))
+                if t > self.clock.t:
+                    self.clock.advance(t - self.clock.t)
                 continue
-            r.out_tokens = gen_tokens(r.seed_key + ":out", r.max_new)
-            live.append(r)
-        if live:
-            self._decode(live)
-        for r in reqs:
-            self._charge(r)
+            admit()  # arrivals due mid-decode join the batch (GPU stays packed)
+            completed = self._step_spec(live) if self.speculative else self._step_batch(live)
+            if completed:
+                done_ids = {id(r) for r in completed}
+                live = [r for r in live if id(r) not in done_ids]
+                for r in completed:
+                    self._charge(r)
+                    settle(r)
+        else:
+            raise RuntimeError("run_events did not terminate")
 
     # ------------------------------------------------------------------ prefill
 
@@ -116,72 +181,58 @@ class ServingEngine:
 
     # ------------------------------------------------------------------- decode
 
-    def _decode(self, live) -> None:
-        local = [r for r in live if self.models[r.model].local]
-        remote = [r for r in live if not self.models[r.model].local]
-        # Remote API endpoints are opaque: each request decodes independently.
-        for r in remote:
-            spec = self.models[r.model]
-            dt = len(r.out_tokens) * spec.decode_ms_per_tok / 1000.0
-            self.clock.advance(dt)
-            r.dt += dt
-        if local:
-            if self.speculative:
-                self._decode_spec(local)
-            else:
-                self._decode_batch(local)
-
-    def _decode_batch(self, live) -> None:
+    def _step_batch(self, live):
         """Continuous batching: one step advances every in-flight request by
-        one token; the step costs the slowest model still decoding."""
-        remaining = {id(r): len(r.out_tokens) for r in live}
-        while any(remaining[id(x)] > 0 for x in live):
-            dt = max(self.models[x.model].decode_ms_per_tok for x in live if remaining[id(x)] > 0) / 1000.0
-            self.clock.advance(dt)
-            for x in live:
-                if remaining[id(x)] > 0:
-                    remaining[id(x)] -= 1
-                    x.dt += dt
+        one token; the step costs the slowest model still decoding.
+        Returns the requests that completed this step."""
+        dt = max(self.models[x.model].decode_ms_per_tok for x in live) / 1000.0
+        self.clock.advance(dt)
+        completed = []
+        for x in live:
+            x.spec_pos += 1
+            x.dt += dt
+            if x.spec_pos >= len(x.out_tokens):
+                completed.append(x)
+        return completed
 
-    def _decode_spec(self, live) -> None:
-        """Continuous-batching speculative decoding: every in-flight request
-        drafts a window of SPEC_GAMMA tokens together (one draft forward
-        pass), then the targets verify in one shared step. Rejection rule
-        (Leviathan et al. 2023): keep the longest accepted draft prefix and
-        append the target's own token at the first mismatch (advance =
+    def _step_spec(self, live):
+        """One continuous-batching speculative decoding step: every in-flight
+        request drafts a window of SPEC_GAMMA tokens together (one draft
+        forward pass), then the targets verify in one shared step. Rejection
+        rule (Leviathan et al. 2023): keep the longest accepted draft prefix
+        and append the target's own token at the first mismatch (advance =
         mismatch position); a fully accepted window advances by gamma + 1.
-        Step cost = slowest draft window + one target verify pass."""
+        Step cost = slowest draft window + one target verify pass.
+        Returns the requests that completed this step."""
         draft = min(
             (m for m in self.models.values() if m.local),
             key=lambda m: m.decode_ms_per_tok,
         )
+        wmax = max(min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos) for r in live)
+        dt = wmax * draft.decode_ms_per_tok / 1000.0 + max(
+            self.models[r.model].decode_ms_per_tok for r in live
+        ) / 1000.0
+        self.clock.advance(dt)
+        completed = []
         for r in live:
-            r.spec_pos = 0
-        while True:
-            active = [r for r in live if r.spec_pos < len(r.out_tokens)]
-            if not active:
-                return
-            wmax = max(min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos) for r in active)
-            dt = wmax * draft.decode_ms_per_tok / 1000.0 + max(
-                self.models[r.model].decode_ms_per_tok for r in active
-            ) / 1000.0
-            self.clock.advance(dt)
-            for r in active:
-                window = min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos)
-                # Verify token by token: accept the draft prefix until the
-                # first mismatch, then sample one target token there.
-                adv = 0
-                for k in range(window):
-                    rng = random.Random(
-                        "%s:spec:%d:%d" % (r.seed_key, r.spec_pos, k))
-                    if rng.random() >= self.SPEC_ACCEPT:
-                        break
-                    adv += 1
-                # The target always contributes one token of its own: at the
-                # first mismatch, or appended after a fully accepted window.
+            window = min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos)
+            # Verify token by token: accept the draft prefix until the
+            # first mismatch, then sample one target token there.
+            adv = 0
+            for k in range(window):
+                rng = random.Random(
+                    "%s:spec:%d:%d" % (r.seed_key, r.spec_pos, k))
+                if rng.random() >= self.SPEC_ACCEPT:
+                    break
                 adv += 1
-                r.spec_pos += min(adv, len(r.out_tokens) - r.spec_pos)
-                r.dt += dt
+            # The target always contributes one token of its own: at the
+            # first mismatch, or appended after a fully accepted window.
+            adv += 1
+            r.spec_pos += min(adv, len(r.out_tokens) - r.spec_pos)
+            r.dt += dt
+            if r.spec_pos >= len(r.out_tokens):
+                completed.append(r)
+        return completed
 
     # -------------------------------------------------------------------- cost
 

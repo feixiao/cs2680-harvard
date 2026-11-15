@@ -1,14 +1,16 @@
-"""Workload driver: runs all tasks through engine + agents on a shared clock.
+"""Workload driver: an event-driven agent runtime on a shared clock.
 
-``concurrency`` is how many tasks advance at once; each task issues at most
-one model request at a time, and all in-flight requests from a round are
-batched by the engine (prefill FIFO, then continuous-batching decode). The
-round barrier is a max, not a sum: retry backoffs and tool I/O of
-different agents overlap on the shared clock (independent I/O), so a round
-costs the slowest agent's wait, not the sum of everyone's.
+Each admitted agent owns at most one in-flight model request. When a request
+completes, the agent decides immediately (record the result, bookkeep tools,
+or schedule a retry after backoff) and its follow-up request becomes ready
+after that delay — tool I/O and backoffs run concurrently with other
+agents' GPU work on the same clock, not as a round barrier. The engine
+continuously batches all ready requests (prefill FIFO, continuous-batching
+decode, week-14 request scheduling). ``concurrency`` caps how many tasks
+advance in parallel.
 """
 
-from .agent_loop import Agent, AgentConfig, DONE, FAILED
+from .agent_loop import Agent, AgentConfig, AWAIT_MODEL, DONE, FAILED, INIT
 from .lens import Lens
 from .scheduler import ServingEngine
 from .simclock import SimClock
@@ -27,38 +29,41 @@ def run_workload(tasks, config=None):
         tp_size=config.tp_size,
     )
     agents = [Agent(t, i, engine, config, lens, clock) for i, t in enumerate(tasks)]
-    active = []
-    for _ in range(1_000_000):
-        if all(a.state in (DONE, FAILED) for a in agents):
-            break
-        while len(active) < config.concurrency:
-            nxt = next((a for a in agents if a.state == "INIT"), None)
+    in_flight = [0]
+    pending = []
+    seq = [0]
+
+    def admit_next():
+        """Admit waiting tasks while slots are free (up to ``concurrency``)."""
+        while in_flight[0] < config.concurrency:
+            nxt = next((a for a in agents if a.state == INIT), None)
             if nxt is None:
                 break
-            active.append(nxt)
+            in_flight[0] += 1
+            seq[0] += 1
             nxt.submit()
-        pending = [a for a in active if a.state == "AWAIT_MODEL"]
-        if pending:
-            engine.run_batch([a.request for a in pending])
-            for a in pending:
-                a.receive()
-            # Retry backoffs of different agents overlap.
-            w = max((a.wait for a in pending), default=0.0)
-            if w:
-                clock.advance(w)
-            for a in pending:
-                a.finish_wait()
-        running = [a for a in active if a.state == "RUN_TOOLS"]
-        if running:
-            # Tool I/O of different agents overlaps: the shared clock
-            # advances once by the round maximum, then all agents
-            # record their results.
-            barrier = max(a.tool_dt() for a in running)
-            if barrier:
-                clock.advance(barrier)
-            for a in running:
-                a.run_tools()
-        active = [a for a in active if a.state not in (DONE, FAILED)]
-    else:
-        raise RuntimeError("run_workload did not terminate")
+            pending.append((clock.now, seq[0], nxt))
+
+    def on_complete(r):
+        a = r.agent
+        a.receive()
+        if a.state in (DONE, FAILED):
+            in_flight[0] -= 1
+            admit_next()
+            return []
+        if a.state == AWAIT_MODEL:
+            # Transient failure: retry the same step after the backoff.
+            seq[0] += 1
+            return [(a.wait, a, seq[0])]
+        td = a.tool_dt()  # tool I/O runs concurrently with GPU work
+        a.run_tools()
+        if a.state == AWAIT_MODEL:
+            seq[0] += 1
+            return [(td, a, seq[0])]
+        in_flight[0] -= 1
+        admit_next()
+        return []
+
+    admit_next()
+    engine.run_events(pending, on_complete)
     return lens.summary(engine.kv, clock.now), lens
