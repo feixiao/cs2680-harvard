@@ -65,10 +65,10 @@ Multi-agent 并不新(有数十年研究史,本讲不展开历史),而是把它�
 |Hybrid|Dynamic topology|Rewires as work proceeds|Unknown structure|Hard to debug|
 
 ## 任务分解(Task decomposition)
-
 复杂任务拆成若干子任务各自执行,最后合并(merge)为最终结果。
 
 ### 六个拆分轴
+复杂任务拆成若干子任务各自执行,最后合并(merge)为最终结果。
 
 - **Data**:每个 agent 处理一部分文档/记录
 - **Expertise**:安全、性能、正确性、法律各一个
@@ -76,10 +76,18 @@ Multi-agent 并不新(有数十年研究史,本讲不展开历史),而是把它�
 - **Hypothesis**:多个 agent 调查竞争性解释
 - **Tool**:Web、数据库、代码执行、内部文档
 - **Authority**:在不同管理域中行动
+### 六个拆分轴
 
 可叠加:200 文件的 PR 先按 data(文件)拆,再按 expertise(安全、性能)拆。
+- **Data**:每个 agent 处理一部分文档/记录
+- **Expertise**:安全、性能、正确性、法律各一个
+- **Stage**:plan、implement、test、review
+- **Hypothesis**:多个 agent 调查竞争性解释
+- **Tool**:Web、数据库、代码执行、内部文档
+- **Authority**:在不同管理域中行动
 
 ### 子任务定义:八要素
+可叠加:200 文件的 PR 先按 data(文件)拆,再按 expertise(安全、性能)拆。
 
 ```json
 {
