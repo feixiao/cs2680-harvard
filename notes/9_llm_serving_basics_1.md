@@ -1,4 +1,4 @@
-# 第 9 讲：LLM 服务基础 I(认识 LLM)
+# 第 9 讲:LLM 服务基础 I(认识 LLM)
 
 > **LLM Serving Basics I: Introduction to LLM** · Harvard CS2680 · 讲师 Juncheng Yang
 > 原始幻灯片:[9_llm_serving_basics_1.pdf](../9_llm_serving_basics_1.pdf)

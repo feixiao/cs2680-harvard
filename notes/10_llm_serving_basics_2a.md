@@ -1,4 +1,4 @@
-# 第 10 讲(上):LLM 服务基础 II——GPU 入门
+# 第 10 讲(上):LLM 服务基础 II(GPU 入门)
 
 > **LLM Serving Basics II: Intro to GPUs** · Harvard CS2680(*Modern AI Systems: Agents and System Optimizations*) · 讲师 Juncheng Yang · course.agentic-system.org
 > 原始幻灯片:[10_llm_serving_basics_2a.pdf](../10_llm_serving_basics_2a.pdf)
