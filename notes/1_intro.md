@@ -1,4 +1,4 @@
-# 第 1 讲：课程导论
+# 第 1 讲:课程导论
 
 > **Modern AI Systems: Agents and System Optimizations — Overview** · Harvard CS2680 · 讲师 Juncheng Yang · 课程主页 https://cs2680.com · Harvard MaDSys 组
 > 原始幻灯片:[1_intro.pdf](../1_intro.pdf)
