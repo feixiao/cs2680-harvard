@@ -71,6 +71,12 @@ class ServingEngine:
         resident = [self.models[n] for n in resident]
         kv_budget = max(0.0, gpu_gb - sum(m.weights_gb for m in resident) - kv_headroom_gb) * (1 << 30)
         self.kv = PagedKVCache(int(kv_budget))
+        # The fastest local model is the speculative draft: its prompt KV
+        # must be built before it can draft (see _prefill_draft).
+        self._draft = min(
+            (m for m in self.models.values() if m.local),
+            key=lambda m: m.decode_ms_per_tok,
+        )
 
     def run_events(self, ready, on_complete):
         """Event-driven continuous batching (week 14: agent request
@@ -119,6 +125,8 @@ class ServingEngine:
                     r.out_tokens = gen_tokens(r.seed_key + ":out", r.max_new)
                     r.spec_pos = 0
                     if self.models[r.model].local:
+                        if self.speculative:
+                            self._prefill_draft(r, self.tp_size)
                         live.append(r)
                     else:
                         dt = len(r.out_tokens) * self.models[r.model].decode_ms_per_tok / 1000.0
@@ -189,6 +197,26 @@ class ServingEngine:
         self.clock.advance(dt)
         r.dt += dt
 
+    def _prefill_draft(self, r, split: int) -> None:
+        """Build the draft model's prompt KV. The 0.5B draft is a standalone
+        model: it must prefill the window — with prefix reuse and the same
+        work-quantum TP split as the target — before it can draft. One GPU,
+        so the pass is sequential with the target prefill; it is charged at
+        the draft's declared rate and is a kernel-internal cost (it never
+        touches the agent's token/cost ledger)."""
+        spec = self._draft
+        n = len(r.prompt_tokens)
+        if n == 0:
+            return
+        keys = block_keys(spec.name, r.prompt_tokens)
+        cached = self.kv.cached_tokens(keys, n) if self.prefix_reuse else 0
+        self.kv.materialize(keys, self._block_bytes(spec, n))
+        billable = n - cached
+        eff = min(split, max(1, billable // 64))
+        dt = billable * spec.prefill_ms_per_tok / 1000.0 / eff
+        self.clock.advance(dt)
+        r.dt += dt
+
     # ------------------------------------------------------------------- decode
 
     def _step_batch(self, live):
@@ -214,10 +242,7 @@ class ServingEngine:
         mismatch position); a fully accepted window advances by gamma + 1.
         Step cost = slowest draft window + one target verify pass.
         Returns the requests that completed this step."""
-        draft = min(
-            (m for m in self.models.values() if m.local),
-            key=lambda m: m.decode_ms_per_tok,
-        )
+        draft = self._draft
         wmax = max(min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos) for r in live)
         dt = wmax * draft.decode_ms_per_tok / 1000.0 + max(
             self.models[r.model].decode_ms_per_tok for r in live
