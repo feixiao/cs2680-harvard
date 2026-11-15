@@ -10,18 +10,22 @@ from .models import MODELS  # noqa: F401  (models available to policies)
 
 
 def route_by_step(task, step_idx):
-    """Baseline routing: everything goes to the expert API model."""
-    return "expert"
+    """Routing policy: every step is served by the local standard 8B model.
+
+    11x cheaper prompt, 2.6x faster decode than the expert API; the local
+    GPU can also batch these requests continuously."""
+    return "standard"
 
 
 def baseline_config():
-    """The un-optimized full stack: serial tasks, serial tools, no cache
-    reuse, no compaction, no speculation, all-expert routing."""
+    """Optimized full stack: all steps on local standard, all 16 tasks
+    advance concurrently (continuous batching), parallel tool calls, and
+    content-addressed KV prefix reuse across steps of a task."""
     return AgentConfig(
         router=route_by_step,
-        concurrency=1,
-        parallel_tools=False,
+        concurrency=16,
+        parallel_tools=True,
         compaction=False,
-        prefix_reuse=False,
+        prefix_reuse=True,
         speculative=False,
     )
