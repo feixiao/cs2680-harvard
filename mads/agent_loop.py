@@ -29,6 +29,8 @@ class AgentConfig:
         retry_limit: int = 3,
         keep_recent: int = 3,
         prefix_budget: int = None,
+        resident=None,
+        tp_size: int = 1,
     ):
         self.router = router if router is not None else (lambda task, step_idx: "expert")
         self.concurrency = concurrency
@@ -40,6 +42,8 @@ class AgentConfig:
         self.retry_limit = retry_limit
         self.keep_recent = keep_recent
         self.prefix_budget = prefix_budget  # tokens; proactive compaction cap
+        self.resident = resident  # GPU-resident model names (KV budget sizing)
+        self.tp_size = tp_size  # tensor-parallel degree for prefill
 
 
 class Message:

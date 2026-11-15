@@ -20,6 +20,8 @@ def run_workload(tasks, config=None):
         prefix_reuse=config.prefix_reuse,
         speculative=config.speculative,
         error_rate=config.error_rate,
+        resident=config.resident,
+        tp_size=config.tp_size,
     )
     agents = [Agent(t, i, engine, config, lens, clock) for i, t in enumerate(tasks)]
     active = []

@@ -36,7 +36,8 @@ class ModelRequest:
 
 class ServingEngine:
     SPEC_GAMMA = 5
-    SPEC_ACCEPT = 0.85
+    # Per-token acceptance of a modern draft model (EAGLE-class): 0.92.
+    SPEC_ACCEPT = 0.92
 
     def __init__(
         self,
@@ -47,13 +48,18 @@ class ServingEngine:
         prefix_reuse: bool = False,
         speculative: bool = False,
         error_rate: float = 0.05,
+        resident=None,
+        tp_size: int = 1,
     ):
         self.models = models if models is not None else MODELS
         self.clock = clock if clock is not None else SimClock()
         self.prefix_reuse = prefix_reuse
         self.speculative = speculative
         self.error_rate = error_rate
-        resident = [m for m in self.models.values() if m.local]
+        self.tp_size = max(1, int(tp_size))  # tensor-parallel prefill split
+        if resident is None:
+            resident = [m.name for m in self.models.values() if m.local]
+        resident = [self.models[n] for n in resident]
         kv_budget = max(0.0, gpu_gb - sum(m.weights_gb for m in resident) - kv_headroom_gb) * (1 << 30)
         self.kv = PagedKVCache(int(kv_budget))
 
@@ -61,7 +67,7 @@ class ServingEngine:
         if not reqs:
             return
         for r in reqs:
-            self._prefill(r)
+            self._prefill(r, split=min(self.tp_size, len(reqs)))
         for r in reqs:
             rng = random.Random(r.seed_key + ":status")
             r.failed = rng.random() < self.error_rate
@@ -85,7 +91,7 @@ class ServingEngine:
             out.append(size * spec.kv_bytes_per_tok)
         return out
 
-    def _prefill(self, r) -> None:
+    def _prefill(self, r, split: int = 1) -> None:
         spec = self.models[r.model]
         n = len(r.prompt_tokens)
         if spec.local and self.prefix_reuse:
@@ -100,7 +106,9 @@ class ServingEngine:
                 pass
         billable = n - r.cached
         r.billable = billable
-        dt = billable * spec.prefill_ms_per_tok / 1000.0
+        # Prefill is compute-bound: split the prompt across tp_size ranks
+        # (communication overhead modeled as the split bound).
+        dt = billable * spec.prefill_ms_per_tok / 1000.0 / split
         self.clock.advance(dt)
         r.dt += dt
 
