@@ -3,7 +3,7 @@
 本仓库是对哈佛 CS2680《Modern AI Systems: Agents and System Optimizations》(Modern AI 系统:智能体与系统优化,主讲:Juncheng Yang)课程幻灯片的个人学习笔记。
 
 - 中文学习材料(课程主线、14 周路线、五个作业、全栈概念、参照实现说明):[CS2680-学习材料.md](CS2680-学习材料.md)
-- 每个 PDF 对应的详细中文笔记(逐讲逐页展开):[notes/](notes/)
+- 每个 PDF 对应的中文简化总结(按章节提炼要点,非逐页翻译):[notes/](notes/)
 - 参照实现:`mads/` 包 —— 确定性模拟的 Mads 全栈(Agent Loop / 上下文 / 批处理 / 分页 KV / 投机解码),五个作业各对应一个模块
 - 基准:`bash autoresearch.sh` 跑 16 任务工作负载并打印 METRIC 行(主指标 `e2e_latency_s`,正确性门 16/16 任务完成)
 
