@@ -47,4 +47,14 @@ STARTER = ModelSpec(
     weights_gb=6.0, kv_bytes_per_tok=65 * 1024,
 )
 
-MODELS = {"expert": EXPERT, "standard": STANDARD, "starter": STARTER}
+# 0.5B draft model for speculative decoding: never routed to by the agent,
+# it only supplies draft windows that the target model verifies in one step.
+DRAFT = ModelSpec(
+    name="draft", local=True,
+    prefill_ms_per_tok=0.02, decode_ms_per_tok=1.5,
+    in_price=0.0, out_price=0.0, cache_in_price=0.0,
+    max_ctx=8192,
+    weights_gb=1.0, kv_bytes_per_tok=8 * 1024,
+)
+
+MODELS = {"expert": EXPERT, "standard": STANDARD, "starter": STARTER, "draft": DRAFT}

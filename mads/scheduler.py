@@ -26,6 +26,7 @@ class ModelRequest:
     seed_key: str
     # filled by the engine:
     out_tokens: list = None
+    spec_pos: int = 0
     cached: int = 0
     billable: int = 0     # prompt tokens actually prefilled (cost at in_price)
     failed: bool = False
@@ -121,43 +122,44 @@ class ServingEngine:
                 self._decode_batch(local)
 
     def _decode_batch(self, live) -> None:
+        """Continuous batching: one step advances every in-flight request by
+        one token; the step costs the slowest model still decoding."""
         remaining = {id(r): len(r.out_tokens) for r in live}
-        for r in live:
-            if remaining[id(r)] <= 0:
-                continue
+        while any(remaining[id(x)] > 0 for x in live):
             dt = max(self.models[x.model].decode_ms_per_tok for x in live if remaining[id(x)] > 0) / 1000.0
             self.clock.advance(dt)
-            for x in list(live):
-                if remaining[id(x)] <= 0:
-                    continue
-                remaining[id(x)] -= 1
-                x.dt += dt
-            # blocks resident for the request's KV; reuse happens at prefill time
-        pass
+            for x in live:
+                if remaining[id(x)] > 0:
+                    remaining[id(x)] -= 1
+                    x.dt += dt
 
     def _decode_spec(self, live) -> None:
-        """Draft windows of SPEC_GAMMA tokens with the fastest local model,
-        verify each window with one target step; a fully accepted window
-        produces gamma tokens per target step instead of one."""
+        """Continuous-batching speculative decoding: every in-flight request
+        drafts a window of SPEC_GAMMA tokens together (one draft forward
+        pass), then the targets verify in one shared step. A fully accepted
+        window advances the request by gamma tokens; a rejected window by
+        one. Step cost = slowest draft window + slowest target verify."""
         draft = min(
             (m for m in self.models.values() if m.local),
             key=lambda m: m.decode_ms_per_tok,
         )
-        remaining = {id(r): len(r.out_tokens) for r in live}
         for r in live:
-            target = self.models[r.model]
-            pos = 0
-            total = len(r.out_tokens)
-            while remaining[id(r)] > 0:
-                window = min(self.SPEC_GAMMA, total - pos)
-                rng = random.Random("%s:spec:%d" % (r.seed_key, pos))
+            r.spec_pos = 0
+        while True:
+            active = [r for r in live if r.spec_pos < len(r.out_tokens)]
+            if not active:
+                return
+            wmax = max(min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos) for r in active)
+            dt = wmax * draft.decode_ms_per_tok / 1000.0 + max(
+                self.models[r.model].decode_ms_per_tok for r in active
+            ) / 1000.0
+            self.clock.advance(dt)
+            for r in active:
+                window = min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos)
+                rng = random.Random("%s:spec:%d" % (r.seed_key, r.spec_pos))
                 accepted = all(rng.random() < self.SPEC_ACCEPT for _ in range(window))
-                dt = window * draft.decode_ms_per_tok / 1000.0 + target.decode_ms_per_tok / 1000.0
-                self.clock.advance(dt)
+                r.spec_pos += window if accepted else 1
                 r.dt += dt
-                step = window if accepted else 1
-                pos += step
-                remaining[id(r)] = min(remaining[id(r)], total - pos)
 
     # -------------------------------------------------------------------- cost
 

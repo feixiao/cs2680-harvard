@@ -28,6 +28,7 @@ class AgentConfig:
         error_rate: float = 0.05,
         retry_limit: int = 3,
         keep_recent: int = 3,
+        prefix_budget: int = None,
     ):
         self.router = router if router is not None else (lambda task, step_idx: "expert")
         self.concurrency = concurrency
@@ -38,15 +39,17 @@ class AgentConfig:
         self.error_rate = error_rate
         self.retry_limit = retry_limit
         self.keep_recent = keep_recent
+        self.prefix_budget = prefix_budget  # tokens; proactive compaction cap
 
 
 class Message:
-    __slots__ = ("role", "tokens", "mid")
+    __slots__ = ("role", "tokens", "mid", "summarized")
 
     def __init__(self, role: str, tokens, mid: int):
         self.role = role
         self.tokens = tokens
         self.mid = mid
+        self.summarized = False
 
     @property
     def n(self):
@@ -76,21 +79,28 @@ class Agent:
         return sum(m.n for m in self.messages)
 
     def _window(self, max_ctx: int) -> None:
-        """Keep the context under max_ctx. Baseline: drop oldest messages
-        (never the system/tools pair). With compaction: fold the oldest
-        tool results into fixed-size summaries instead."""
-        while self._total() > max_ctx:
-            if self.config.compaction:
-                candidates = [m for m in self.messages if m.role == "tool" and m.n > 100]
-                keep = len(self.messages) - len(self.messages[:2]) - self.config.keep_recent
-                old = [m for m in self.messages[2 : 2 + keep] if m.role == "tool" and m.n > 100]
-                if not old:
-                    self._drop_oldest()
-                    continue
-                m = old[0]
-                m.tokens = gen_tokens("summary:" + str(m.mid), 100)
-            else:
-                self._drop_oldest()
+        """Keep the context under budget. Without compaction: drop oldest
+        messages (never the system/tools pair). With compaction: proactively
+        summarize the oldest non-recent messages into fixed-size summaries so
+        the working set stays inside ``prefix_budget`` (default: max_ctx),
+        shrinking KV footprint and re-prefill cost."""
+        budget = self.config.prefix_budget or max_ctx
+        budget = max(budget, self.messages[0].n + self.messages[1].n)
+        while self._total() > budget:
+            if self.config.compaction and self._summarize_oldest():
+                continue
+            self._drop_oldest()
+
+    def _summarize_oldest(self) -> bool:
+        """Fold all but the most recent ``keep_recent`` conversation messages
+        into 100-token summaries. Returns True if anything was summarized."""
+        candidates = [m for m in self.messages[2:] if not m.summarized and m.n > 100]
+        if len(candidates) <= self.config.keep_recent:
+            return False
+        for m in candidates[: -self.config.keep_recent]:
+            m.tokens = gen_tokens("summary:%d" % m.mid, 100)
+            m.summarized = True
+        return True
 
     def _drop_oldest(self) -> None:
         if len(self.messages) > 2:

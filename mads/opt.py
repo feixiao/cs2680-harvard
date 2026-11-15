@@ -19,13 +19,17 @@ def route_by_step(task, step_idx):
 
 def baseline_config():
     """Optimized full stack: all steps on local standard, all 16 tasks
-    advance concurrently (continuous batching), parallel tool calls, and
-    content-addressed KV prefix reuse across steps of a task."""
+    advance concurrently (continuous batching), parallel tool calls,
+    content-addressed KV prefix reuse, proactive compaction to a small
+    prefix budget (caps KV footprint), and speculative decoding with the
+    0.5B draft model."""
     return AgentConfig(
         router=route_by_step,
         concurrency=16,
         parallel_tools=True,
-        compaction=False,
+        compaction=True,
         prefix_reuse=True,
-        speculative=False,
+        speculative=True,
+        keep_recent=2,
+        prefix_budget=3072,
     )
