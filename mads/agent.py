@@ -32,17 +32,35 @@ def run_workload(tasks, config=None):
     in_flight = [0]
     pending = []
     seq = [0]
+    burst = [0]  # admissions paced within the current same-time burst
+    burst_t = [None]
 
     def admit_next():
-        """Admit waiting tasks while slots are free (up to ``concurrency``)."""
+        """Admit waiting tasks while slots are free (up to ``concurrency``).
+
+        Tasks arriving at the same instant form a burst; with
+        ``admission_stagger`` > 0 the burst is paced ``delta`` apart in
+        arrival order. Phase-locked cohorts (identical start, similar
+        step lengths) otherwise queue behind each other's serial prefills
+        and keep each other's decode batches window-mixed; pacing breaks
+        the lockstep so the GPU stays packed with disjoint phases."""
+        delta = config.admission_stagger
         while in_flight[0] < config.concurrency:
             nxt = next((a for a in agents if a.state == INIT), None)
             if nxt is None:
                 break
+            if (
+                delta <= 0.0
+                or burst_t[0] is None
+                or clock.now - burst_t[0] > 2.0 * delta
+            ):
+                burst[0] = 0
+                burst_t[0] = clock.now
             in_flight[0] += 1
             seq[0] += 1
             nxt.submit()
-            pending.append((clock.now, seq[0], nxt))
+            pending.append((clock.now + delta * burst[0], seq[0], nxt))
+            burst[0] += 1
 
     def on_complete(r):
         a = r.agent

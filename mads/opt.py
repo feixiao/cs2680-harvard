@@ -20,9 +20,16 @@ def route_by_step(task, step_idx):
 def baseline_config():
     """Optimized full stack: all steps on local starter, all 16 tasks
     advance concurrently (continuous batching), parallel tool calls,
-    content-addressed KV prefix reuse, proactive compaction to a small
-    prefix budget (caps KV footprint), speculative decoding with the
-    0.5B draft model, and 8-way tensor-parallel prefill."""
+    content-addressed KV prefix reuse, aggressive compaction down to the
+    pinned system+tools prefix (the harness keeps working state outside
+    the prompt, so the model re-prefills the smallest stable prefix),
+    speculative decoding with the 0.5B draft model, and 8-way
+    tensor-parallel prefill.
+
+    Admission staggering was swept (20-500ms) and rejected: pacing the
+    16-way burst only delays the dominant agent's own start and the
+    mid-run prefill-queue clusters (created by GPU serialization of
+    near-simultaneous arrivals) are unaffected."""
     return AgentConfig(
         router=route_by_step,
         concurrency=16,

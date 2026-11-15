@@ -31,6 +31,7 @@ class AgentConfig:
         prefix_budget: int = None,
         resident=None,
         tp_size: int = 1,
+        admission_stagger: float = 0.0,
     ):
         self.router = router if router is not None else (lambda task, step_idx: "expert")
         self.concurrency = concurrency
@@ -44,6 +45,9 @@ class AgentConfig:
         self.prefix_budget = prefix_budget  # tokens; proactive compaction cap
         self.resident = resident  # GPU-resident model names (KV budget sizing)
         self.tp_size = tp_size  # tensor-parallel degree for prefill
+        # Pacing for tasks that arrive simultaneously (seconds between
+        # admissions of a same-time burst); 0 = admit the burst at once.
+        self.admission_stagger = admission_stagger
 
 
 class Message:
