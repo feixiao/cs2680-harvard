@@ -99,11 +99,10 @@ class ServingEngine:
                 arrivals.append(ready.pop(0))
             if not arrivals:
                 return
-            split = min(self.tp_size, len(arrivals))
             for _, s, a in arrivals:
                 r = a.request
                 r.agent = a
-                self._prefill(r, split=split)
+                self._prefill(r, split=self.tp_size)
                 rng = random.Random(r.seed_key + ":status")
                 r.failed = rng.random() < self.error_rate
                 if r.failed:
@@ -173,9 +172,13 @@ class ServingEngine:
                 pass
         billable = n - r.cached
         r.billable = billable
-        # Prefill is compute-bound: split the prompt across tp_size ranks
-        # (communication overhead modeled as the split bound).
-        dt = billable * spec.prefill_ms_per_tok / 1000.0 / split
+        # Prefill is compute-bound: tensor parallelism shards the FLOPs
+        # across ranks for ANY request size; the all-reduce communication
+        # only amortizes once each rank holds a work quantum of tokens, so
+        # the effective split is the smaller of the degree and per-request
+        # work (keyed on tokens, not on the arrival-batch size).
+        eff = min(split, max(1, billable // 64))
+        dt = billable * spec.prefill_ms_per_tok / 1000.0 / eff
         self.clock.advance(dt)
         r.dt += dt
 
