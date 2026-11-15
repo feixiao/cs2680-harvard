@@ -146,9 +146,11 @@ class ServingEngine:
     def _decode_spec(self, live) -> None:
         """Continuous-batching speculative decoding: every in-flight request
         drafts a window of SPEC_GAMMA tokens together (one draft forward
-        pass), then the targets verify in one shared step. A fully accepted
-        window advances the request by gamma tokens; a rejected window by
-        one. Step cost = slowest draft window + slowest target verify."""
+        pass), then the targets verify in one shared step. Rejection rule
+        (Leviathan et al. 2023): keep the longest accepted draft prefix and
+        append the target's own token at the first mismatch (advance =
+        mismatch position); a fully accepted window advances by gamma + 1.
+        Step cost = slowest draft window + one target verify pass."""
         draft = min(
             (m for m in self.models.values() if m.local),
             key=lambda m: m.decode_ms_per_tok,
@@ -166,9 +168,19 @@ class ServingEngine:
             self.clock.advance(dt)
             for r in active:
                 window = min(self.SPEC_GAMMA, len(r.out_tokens) - r.spec_pos)
-                rng = random.Random("%s:spec:%d" % (r.seed_key, r.spec_pos))
-                accepted = all(rng.random() < self.SPEC_ACCEPT for _ in range(window))
-                r.spec_pos += window if accepted else 1
+                # Verify token by token: accept the draft prefix until the
+                # first mismatch, then sample one target token there.
+                adv = 0
+                for k in range(window):
+                    rng = random.Random(
+                        "%s:spec:%d:%d" % (r.seed_key, r.spec_pos, k))
+                    if rng.random() >= self.SPEC_ACCEPT:
+                        break
+                    adv += 1
+                # The target always contributes one token of its own: at the
+                # first mismatch, or appended after a fully accepted window.
+                adv += 1
+                r.spec_pos += min(adv, len(r.out_tokens) - r.spec_pos)
                 r.dt += dt
 
     # -------------------------------------------------------------------- cost
