@@ -1,0 +1,409 @@
+--- a/mlx_lm/server.py
++++ b/mlx_lm/server.py
+@@ -19,6 +19,8 @@
+ from queue import Empty as QueueEmpty
+ from queue import Queue
+ from threading import Thread
++
++import threading
+ from typing import (
+     Any,
+     Callable,
+@@ -36,6 +38,11 @@
+ import numpy as np
+ from huggingface_hub import scan_cache_dir
+ 
++try:  # Mads-Serve: content-addressed paged prefix cache (a4_serve/kv_cache.py)
++    from kv_cache import PagedKVCache
++except ImportError:
++    PagedKVCache = None
++
+ from ._version import __version__
+ from .generate import (
+     DEFAULT_QUANTIZED_KV_START,
+@@ -61,6 +68,51 @@
+     return f"{__version__}-{mx.__version__}-{platform.platform()}-{gpu_arch}"
+ 
+ 
++# MLX-MADS METRICS PATCH (CS2680 A4): process-wide counters and gauges exposed
++# at GET /metrics. Plain ints updated under the GIL; reads are racy by at most
++# one increment, which is fine for monitoring.
++METRIC_COUNTERS = {
++    "prompt_cache_hits": 0,
++    "prompt_cache_misses": 0,
++    "prompt_cache_tokens_reused": 0,
++    "requests_completed": 0,
++    # Session-monotonic token/time totals (accumulate batch-generator
++    # deltas, so they survive batch-generator resets):
++    "prompt_tokens": 0,
++    "prompt_time": 0.0,
++    "generation_tokens": 0,
++    "generation_steps": 0,
++    "decode_time": 0.0,
++}
++
++
++def _count_prompt_cache_fetch(n_reused: int):
++    if n_reused > 0:
++        METRIC_COUNTERS["prompt_cache_hits"] += 1
++        METRIC_COUNTERS["prompt_cache_tokens_reused"] += n_reused
++    else:
++        METRIC_COUNTERS["prompt_cache_misses"] += 1
++
++
++_BG_COUNTER_FIELDS = (
++    "prompt_tokens",
++    "prompt_time",
++    "generation_tokens",
++    "generation_steps",
++    "decode_time",
++)
++
++
++def _account_bg_counters(rg, bg):
++    """Fold the batch generator's counter deltas into the session counters."""
++    c = bg._counters
++    last = rg._last_bg_counters or tuple(0.0 for _ in _BG_COUNTER_FIELDS)
++    cur = tuple(getattr(c, f) for f in _BG_COUNTER_FIELDS)
++    rg._last_bg_counters = cur
++    for name, cur_v, last_v in zip(_BG_COUNTER_FIELDS, cur, last):
++        METRIC_COUNTERS[name] += max(0.0, cur_v - last_v)
++
++
+ class ToolCallFormatter:
+     def __init__(self, tool_parser, tools, streaming=False):
+         self._idx = 0
+@@ -530,6 +582,16 @@
+         self.prompt_cache = prompt_cache
+         self.requests = Queue()
+         self._state_machine_cache = {}
++        # MLX-MADS METRICS PATCH: refs to generation-loop state for /metrics
++        self._active_batch_generator = None
++        self._batch_results = None
++        self._unprocessed = None
++        self._last_bg_counters = None
++        # MLX-MADS PAGED-KV: content-addressed block prefix cache (course A4)
++        self._paged_kv = (
++            PagedKVCache(max_blocks=1 << 20) if PagedKVCache is not None else None
++        )
++        self._paged_kv_lock = threading.Lock()
+ 
+         self._time_budget = TimeBudget()
+         self._is_distributed = mx.distributed.init().size() > 1
+@@ -539,6 +601,21 @@
+         self._generation_thread = Thread(target=self._run_generate)
+         self._generation_thread.start()
+ 
++    def _account_paged_kv(self, tokens):
++        # MLX-MADS PAGED-KV: mirror the request prefix into the course's
++        # block-level content-addressed cache and record the skip.
++        c = self._paged_kv
++        if c is None:
++            return
++        try:
++            ids = list(tokens)
++            with self._paged_kv_lock:
++                n = c.match_prefix(ids)
++                c.register(ids)
++                c.record_prefill(max(0, len(ids) - n))
++        except Exception:
++            pass
++
+     def _run_generate(self):
+         try:
+             self._generate()
+@@ -789,6 +866,7 @@
+         batch_results = {}
+ 
+         unprocessed_requests = []
++        self._unprocessed = unprocessed_requests
+ 
+         def get_next_request(timeout=None):
+             if unprocessed_requests:
+@@ -833,6 +911,7 @@
+                         rqueue.put(e)
+                         continue
+ 
++                    self._account_paged_kv(prompt)
+                     stop_sequences, text_sm = self._make_state_machine(
+                         self.model_provider.model_key,
+                         current_tokenizer,
+@@ -844,6 +923,7 @@
+                         current_model_key, prompt
+                     )
+                     prompt_cache_count = len(prompt) - len(rest)
++                    _count_prompt_cache_fetch(prompt_cache_count)
+                     N = prompt_cache_count
+                     while N > 0:
+                         if N >= len(segments[0]):
+@@ -880,6 +960,7 @@
+                         "segment_types": segment_types[::-1],
+                         "top_logprobs": args.top_logprobs,
+                     }
++                    self._batch_results = batch_results
+                     # just making sure we don't leave a reference around
+                     del cache
+ 
+@@ -916,6 +997,8 @@
+                         prefill_step_size=self.cli_args.prefill_step_size,
+                         stream=generation_stream,
+                     )
++                    self._active_batch_generator = batch_generator
++                    self._last_bg_counters = None
+                     unprocessed_requests.append((rqueue, request, args))
+                     continue
+ 
+@@ -936,17 +1019,27 @@
+                         batch_generator.close()
+                         batch_generator = None
+                         drain_batch = False
++                    self._active_batch_generator = batch_generator
++                    self._batch_results = batch_results if batch_generator else None
+                     continue
+ 
+                 uids_to_remove = []
+                 for _ in self._time_budget:
+                     prompt_responses, gen_responses = batch_generator.next()
++                    _account_bg_counters(self, batch_generator)
+                     if not prompt_responses and not gen_responses:
+                         break
+ 
+                     # Progress report for prompt processing
+                     for r in prompt_responses:
+-                        result = batch_results[r.uid]
++                        # Defensive: never let a vanished batch entry kill the
++                        # whole generation thread (upstream dispatch bug).
++                        result = batch_results.get(r.uid)
++                        if result is None:
++                            logging.warning(
++                                "dropping progress for unknown uid %s", r.uid
++                            )
++                            continue
+                         result["rqueue"].put(r.progress)
+                         if result["ctx"]._should_stop:
+                             uids_to_remove.append(r.uid)
+@@ -970,7 +1063,14 @@
+                     del caches
+ 
+                     for r in gen_responses:
+-                        result = batch_results[r.uid]
++                        # Defensive: never let a vanished batch entry kill the
++                        # whole generation thread (upstream dispatch bug).
++                        result = batch_results.get(r.uid)
++                        if result is None:
++                            logging.warning(
++                                "dropping token for unknown uid %s", r.uid
++                            )
++                            continue
+ 
+                         # Don't decode the final stop token
+                         if r.finish_reason == "stop":
+@@ -1007,6 +1107,7 @@
+                                 cache_type="assistant",
+                             )
+                             del batch_results[r.uid]
++                            METRIC_COUNTERS["requests_completed"] += 1
+ 
+                         if result["ctx"]._should_stop:
+                             uids_to_remove.append(r.uid)
+@@ -1042,6 +1143,7 @@
+             prompt, _, _, initial_state, vision = self._tokenize(
+                 tokenizer, request, args
+             )
++            self._account_paged_kv(prompt)
+             stop_sequences, text_sm = self._make_state_machine(
+                 self.model_provider.model_key,
+                 tokenizer,
+@@ -1074,6 +1176,7 @@
+                 self.model_provider.model_key, cache_key
+             )
+             ctx.prompt_cache_count = len(prompt) - len(rest)
++            _count_prompt_cache_fetch(ctx.prompt_cache_count)
+             rest = prompt[ctx.prompt_cache_count :]
+             if cache is None:
+                 cache = make_prompt_cache(self.model_provider.model)
+@@ -1140,6 +1243,7 @@
+                     break
+ 
+             rqueue.put(None)
++            METRIC_COUNTERS["requests_completed"] += 1
+ 
+             # Save the KV cache again
+             self.prompt_cache.insert_cache(
+@@ -1792,6 +1896,8 @@
+             self.handle_models_request()
+         elif self.path == "/health":
+             self.handle_health_check()
++        elif self.path == "/metrics":
++            self.handle_metrics()
+         else:
+             self._set_completion_headers(404)
+             self.end_headers()
+@@ -1811,6 +1917,167 @@
+         self.wfile.write(json.dumps({"status": status}).encode())
+         self.wfile.flush()
+ 
++    def handle_metrics(self):
++        """
++        MLX-MADS METRICS PATCH (CS2680 A4).
++
++        Render a Prometheus text snapshot of the engine: prompt-cache (KV
++        prefix-reuse) state, in-flight/queued request counts, and the
++        batch generator's token/time counters.
++        """
++        rg = self.response_generator
++        lines = []
++
++        def gauge(name, value, help_text):
++            lines.append(f"# HELP {name} {help_text}")
++            lines.append(f"# TYPE {name} gauge")
++            lines.append(f"{name} {value}")
++
++        def counter(name, value, help_text):
++            lines.append(f"# HELP {name} {help_text}")
++            lines.append(f"# TYPE {name} counter")
++            lines.append(f"{name} {value}")
++
++        n_entries = len(rg.prompt_cache)
++        gauge(
++            "mlx_lm_prompt_cache_entries",
++            n_entries,
++            "Number of distinct KV caches held in the prompt cache",
++        )
++        gauge(
++            "mlx_lm_prompt_cache_bytes",
++            int(rg.prompt_cache.nbytes),
++            "Total bytes of KV cache held in the prompt cache",
++        )
++        lines.append("# HELP mlx_lm_prompt_cache_entries_by_type KV entries by type")
++        lines.append("# TYPE mlx_lm_prompt_cache_entries_by_type gauge")
++        for cache_type, stats in rg.prompt_cache.stats_by_type().items():
++            lines.append(
++                f'mlx_lm_prompt_cache_entries_by_type{{type="{cache_type}"}} '
++                f"{stats['n_sequences']}"
++            )
++
++        counter(
++            "mlx_lm_prompt_cache_hits_total",
++            METRIC_COUNTERS["prompt_cache_hits"],
++            "Requests whose prompt found a reusable KV prefix",
++        )
++        counter(
++            "mlx_lm_prompt_cache_misses_total",
++            METRIC_COUNTERS["prompt_cache_misses"],
++            "Requests whose prompt found no reusable KV prefix",
++        )
++        counter(
++            "mlx_lm_prompt_cache_tokens_reused_total",
++            METRIC_COUNTERS["prompt_cache_tokens_reused"],
++            "Total prompt tokens skipped via KV prefix reuse",
++        )
++        counter(
++            "mlx_lm_requests_completed_total",
++            METRIC_COUNTERS["requests_completed"],
++            "Requests that finished generating",
++        )
++
++        # MLX-MADS PAGED-KV: the course's block-level content-addressed
++        # prefix cache (a4_serve/kv_cache.py), mirrored per request.
++        if rg._paged_kv is not None:
++            with rg._paged_kv_lock:
++                ps = rg._paged_kv.stats()
++                prefilled = getattr(rg._paged_kv, "prefilled_tokens", 0)
++            counter(
++                "mlx_lm_paged_kv_prefix_hits_total",
++                ps["prefix_hits"],
++                "Requests whose token prefix matched >=1 cached block",
++            )
++            counter(
++                "mlx_lm_paged_kv_prefix_misses_total",
++                ps["prefix_misses"],
++                "Requests whose token prefix matched no cached block",
++            )
++            counter(
++                "mlx_lm_paged_kv_skipped_tokens_total",
++                ps["skipped_prefill_tokens"],
++                "Prompt tokens skipped via block-level prefix match",
++            )
++            counter(
++                "mlx_lm_paged_kv_prefilled_tokens_total",
++                prefilled,
++                "Prompt tokens actually prefilled (after skips)",
++            )
++            gauge(
++                "mlx_lm_paged_kv_blocks",
++                ps["blocks"],
++                "Blocks currently held in the paged prefix cache",
++            )
++            gauge(
++                "mlx_lm_paged_kv_cached_tokens",
++                ps["kv_tokens_cached"],
++                "Tokens of KV represented by cached blocks",
++            )
++            gauge(
++                "mlx_lm_paged_kv_hit_rate",
++                round(ps["hit_rate"], 6),
++                "Fraction of requests with a block-level prefix match",
++            )
++
++        bg = rg._active_batch_generator
++        n_inflight = len(rg._batch_results) if rg._batch_results is not None else 0
++        queued = len(rg._unprocessed) + rg.requests.qsize() if rg._unprocessed else 0
++        gauge(
++            "mlx_lm_inflight_requests", n_inflight, "Requests in the active batch"
++        )
++        gauge("mlx_lm_queued_requests", queued, "Requests waiting for a slot")
++
++        prompt_tokens = METRIC_COUNTERS["prompt_tokens"]
++        prompt_time = METRIC_COUNTERS["prompt_time"]
++        generation_tokens = METRIC_COUNTERS["generation_tokens"]
++        generation_steps = METRIC_COUNTERS["generation_steps"]
++        decode_time = METRIC_COUNTERS["decode_time"]
++        kv_bytes = bg.prompt_cache_nbytes if bg is not None else 0
++        counter(
++            "mlx_lm_prompt_tokens_total",
++            prompt_tokens,
++            "Prompt (prefill) tokens processed this session",
++        )
++        counter(
++            "mlx_lm_prompt_time_seconds_total",
++            round(prompt_time, 6),
++            "Seconds spent in prompt processing this session",
++        )
++        counter(
++            "mlx_lm_generation_tokens_total",
++            generation_tokens,
++            "Tokens generated this session",
++        )
++        counter(
++            "mlx_lm_generation_steps_total",
++            generation_steps,
++            "Decode steps taken this session",
++        )
++        counter(
++            "mlx_lm_decode_time_seconds_total",
++            round(decode_time, 6),
++            "Seconds spent in decode steps this session",
++        )
++        gauge(
++            "mlx_lm_kv_active_bytes",
++            int(kv_bytes),
++            "Bytes of KV cache held by active batch sequences",
++        )
++        gauge(
++            "mlx_lm_peak_memory_bytes",
++            int(mx.get_peak_memory()),
++            "Process peak memory in bytes",
++        )
++
++        body = ("\n".join(lines) + "\n").encode()
++        self.send_response(200)
++        self.send_header("Content-type", "text/plain; version=0.0.4")
++        self._set_cors_headers()
++        self.end_headers()
++        self.wfile.write(body)
++        self.wfile.flush()
++
+     def handle_models_request(self):
+         """
+         Handle a GET request for the /v1/models endpoint.

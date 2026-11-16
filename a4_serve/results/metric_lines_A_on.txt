@@ -1,0 +1,21 @@
+METRIC suite=A N=1 reuse=on gpu=applegpu_g16s n=16 ok=16 err=0 wall_s=33.4
+METRIC suite=A N=1 reuse=on ttft_ms_p50=171.9 ttft_ms_p95=187.5 ttft_ms_max=1683.6
+METRIC suite=A N=1 reuse=on tpot_ms_p50=17.80 tpot_ms_p95=21.55
+METRIC suite=A N=1 reuse=on e2e_ms_p50=2294.0 e2e_ms_p95=2665.8
+METRIC suite=A N=1 reuse=on prompt_tok=66080 gen_tok=1606 client_prompt_tok_s=1978.3 client_gen_tok_s=48.1
+METRIC suite=A N=1 reuse=on engine prompt_tok=5665 prompt_time_s=3.20 prompt_tok_s=1772.2 decode_tok=1606 decode_time_s=6.00 decode_tok_s=267.8
+METRIC suite=A N=1 reuse=on cache hits=16 misses=0 reused_tokens=60399 cached_frac=0.914 paged_skip=60256 paged_prefill=5824 kv_bytes_peak=1942585344
+METRIC suite=A N=4 reuse=on gpu=applegpu_g16s n=16 ok=16 err=0 wall_s=15.8
+METRIC suite=A N=4 reuse=on ttft_ms_p50=266.2 ttft_ms_p95=569.9 ttft_ms_max=578.1
+METRIC suite=A N=4 reuse=on tpot_ms_p50=37.83 tpot_ms_p95=38.75
+METRIC suite=A N=4 reuse=on e2e_ms_p50=4377.0 e2e_ms_p95=5099.8
+METRIC suite=A N=4 reuse=on prompt_tok=66080 gen_tok=1426 client_prompt_tok_s=4188.0 client_gen_tok_s=90.4
+METRIC suite=A N=4 reuse=on engine prompt_tok=0 prompt_time_s=0.00 prompt_tok_s=0.0 decode_tok=1426 decode_time_s=5.12 decode_tok_s=278.3
+METRIC suite=A N=4 reuse=on cache hits=16 misses=0 reused_tokens=66064 cached_frac=1.000 paged_skip=66080 paged_prefill=0 kv_bytes_peak=3878117376
+METRIC suite=A N=8 reuse=on gpu=applegpu_g16s n=16 ok=16 err=0 wall_s=10.2
+METRIC suite=A N=8 reuse=on ttft_ms_p50=311.8 ttft_ms_p95=4453.8 ttft_ms_max=4539.5
+METRIC suite=A N=8 reuse=on tpot_ms_p50=60.19 tpot_ms_p95=153.82
+METRIC suite=A N=8 reuse=on e2e_ms_p50=7046.1 e2e_ms_p95=9274.3
+METRIC suite=A N=8 reuse=on prompt_tok=66080 gen_tok=1180 client_prompt_tok_s=6474.8 client_gen_tok_s=115.6
+METRIC suite=A N=8 reuse=on engine prompt_tok=0 prompt_time_s=0.00 prompt_tok_s=0.0 decode_tok=1180 decode_time_s=7.58 decode_tok_s=155.8
+METRIC suite=A N=8 reuse=on cache hits=16 misses=0 reused_tokens=66064 cached_frac=1.000 paged_skip=66080 paged_prefill=0 kv_bytes_peak=5806596096

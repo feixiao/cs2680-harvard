@@ -1,0 +1,6 @@
+.venv/
+.smoke-logs/
+.sandbox-tmp/
+runs/
+__pycache__/
+terminal-bench-core/

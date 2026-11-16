@@ -1,0 +1,21 @@
+METRIC suite=A N=1 reuse=off gpu=applegpu_g16s n=16 ok=16 err=0 wall_s=46.5
+METRIC suite=A N=1 reuse=off ttft_ms_p50=1570.2 ttft_ms_p95=1612.8 ttft_ms_max=1624.5
+METRIC suite=A N=1 reuse=off tpot_ms_p50=17.73 tpot_ms_p95=27.73
+METRIC suite=A N=1 reuse=off e2e_ms_p50=3008.1 e2e_ms_p95=5013.7
+METRIC suite=A N=1 reuse=off prompt_tok=66080 gen_tok=1062 client_prompt_tok_s=1421.4 client_gen_tok_s=22.8
+METRIC suite=A N=1 reuse=off engine prompt_tok=66064 prompt_time_s=24.17 prompt_tok_s=2733.6 decode_tok=1062 decode_time_s=4.35 decode_tok_s=244.0
+METRIC suite=A N=1 reuse=off cache hits=0 misses=16 reused_tokens=0 cached_frac=0.000 paged_skip=60256 paged_prefill=5824 kv_bytes_peak=0
+METRIC suite=A N=4 reuse=off gpu=applegpu_g16s n=16 ok=16 err=0 wall_s=40.3
+METRIC suite=A N=4 reuse=off ttft_ms_p50=3172.6 ttft_ms_p95=5947.1 ttft_ms_max=6312.1
+METRIC suite=A N=4 reuse=off tpot_ms_p50=68.94 tpot_ms_p95=108.65
+METRIC suite=A N=4 reuse=off e2e_ms_p50=9959.7 e2e_ms_p95=14125.8
+METRIC suite=A N=4 reuse=off prompt_tok=66080 gen_tok=1474 client_prompt_tok_s=1639.9 client_gen_tok_s=36.6
+METRIC suite=A N=4 reuse=off engine prompt_tok=66064 prompt_time_s=25.13 prompt_tok_s=2629.2 decode_tok=1474 decode_time_s=5.22 decode_tok_s=282.3
+METRIC suite=A N=4 reuse=off cache hits=0 misses=16 reused_tokens=0 cached_frac=0.000 paged_skip=66080 paged_prefill=0 kv_bytes_peak=0
+METRIC suite=A N=8 reuse=off gpu=applegpu_g16s n=16 ok=16 err=0 wall_s=34.3
+METRIC suite=A N=8 reuse=off ttft_ms_p50=10777.1 ttft_ms_p95=10777.6 ttft_ms_max=10778.2
+METRIC suite=A N=8 reuse=off tpot_ms_p50=101.47 tpot_ms_p95=151.78
+METRIC suite=A N=8 reuse=off e2e_ms_p50=16311.3 e2e_ms_p95=26220.9
+METRIC suite=A N=8 reuse=off prompt_tok=66080 gen_tok=1314 client_prompt_tok_s=1924.7 client_gen_tok_s=38.3
+METRIC suite=A N=8 reuse=off engine prompt_tok=66064 prompt_time_s=23.22 prompt_tok_s=2845.5 decode_tok=1314 decode_time_s=5.16 decode_tok_s=254.6
+METRIC suite=A N=8 reuse=off cache hits=0 misses=16 reused_tokens=0 cached_frac=0.000 paged_skip=66080 paged_prefill=0 kv_bytes_peak=0

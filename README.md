@@ -7,6 +7,18 @@
 - 参照实现:`mads/` 包 —— 确定性模拟的 Mads 全栈(Agent Loop / 上下文 / 批处理 / 分页 KV / 投机解码),五个作业各对应一个模块
 - 基准:`bash autoresearch.sh` 跑 16 任务工作负载并打印 METRIC 行(主指标 `e2e_latency_s`,正确性门 16/16 任务完成)
 
+## 五个作业的真实实现(本机,2026-11-16)
+
+| 目录 | 作业 | 交付物 | 实测结果 |
+|---|---|---|---|
+| `a1_lens/` | Mads-Lens | Claude Code 会话 JSONL 的只读 Web UI(纯 stdlib + 单页 SPA):工具调用轨迹、子 agent 树、错误定位、每次调用 5 类 token/成本 | 本机 `~/.claude` 会话树全量解析,`python3 a1_lens/server.py` 即起 |
+| `a2_loop/` | Mads-Loop | 手写 Agent Runtime(`madsloop/`,~750 行):结构化工具调用、上下文窗口/压缩、5xx 退避重试(4xx 致命)、死循环检测、12 任务终端套件 | 12/12 全过;20% 注入故障 28/28 恢复;同模型 mlx 引擎比 LM Studio 快 2.9×、省 8.5×(前缀缓存) |
+| `a3_opt/` | Mads-Opt | `experiments.py`(真实引擎消融 + `--sim` 确定性 6 点扫描)+ 技术复盘博客 `blog.md` | 路由 31× 成本、并发 9.1× 延迟、全栈 112× 延迟 / 135× 成本,成功率不降 |
+| `a4_serve/` | Mads-Serve | mlx-lm 引擎 + 409 行补丁(/metrics、分页 KV 镜像、**并发 bug 根因修复**)+ 合成负载基准 + 块级前缀缓存 `kv_cache.py` | 共享前缀 TTFT 9–34.5×(N=8 312ms vs 10.8s);N=8 吞吐 +1.9×、尾部延迟 −28%;内存 18GB vs 8GB |
+| `a5_stack/` | Mads-Stack | Terminal-Bench 0.2.18(修了 Python 3.14 兼容 bug)+ terminal-bench-core 65 任务集 + Mads-Loop 驱动的 `MadsStackAgent`(真实 Docker 沙箱 + tmux 终端) | 5 任务 suite 实跑 **1/5(20%)** @1.5B 脑;hello-world 全栈端到端跑通,换 35B/27B 是下一个实验 |
+
+每个目录自带 README(架构、运行命令、实测数据)。
+
 ## 课程链接
 
 - 课程主页:https://cs2680.com

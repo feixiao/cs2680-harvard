@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mads-Lens — Claude Code session viewer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <span class="brand-logo">◉</span>
+      <div>
+        <div class="brand-name">Mads-Lens</div>
+        <div class="brand-sub" id="root-label">loading…</div>
+      </div>
+    </div>
+    <input id="search" type="search" placeholder="filter sessions (prompt, model, dir, path)…"
+           autocomplete="off" spellcheck="false">
+    <div id="session-list" class="session-list"></div>
+    <div class="sidebar-foot" id="sidebar-foot"></div>
+  </aside>
+  <main id="main">
+    <div id="empty" class="empty">
+      <div class="empty-glyph">◉</div>
+      <div>Pick a session on the left.<br>
+      <small>Traces, tool I/O, sub-agent trees, tokens &amp; cost — reconstructed from
+      the async event stream.</small></div>
+    </div>
+    <div id="session" hidden></div>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
