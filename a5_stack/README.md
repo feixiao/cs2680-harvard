@@ -1,94 +1,82 @@
-# a5_stack — Mads-Stack evaluation infra (CS2680 A5)
+# a5_stack — Mads-Stack 评测基础设施 (CS2680 A5)
 
-Terminal-Bench harness + Mads-Stack (Mads-Loop-backed) agent, standing,
-smoke-tested, and run: first full-stack suite measured at 1/5 (20 %) on a
-1.5 B brain — the full path proven end to end ([First full-stack run](#first-full-stack-run-measured-2026-11-16-112-min)).
+Terminal-Bench 夹具 + Mads-Stack (Mads-Loop 驱动) Agent, 已建立,
+已冒烟测试, 并运行: 首次全栈套件在 1.5 B 大脑上实测 1/5 (20%) —
+全路径端到端已验证 ([首次全栈运行](#首次全栈运行-measured-2026-11-16-112-min))。
 
-## What is ready
+## 就绪组件
 
-| Piece | State |
+| 部分 | 状态 |
 |---|---|
-| Docker daemon | Docker Desktop 4.96.1 / Engine **29.9.2** (aarch64, **16 CPU, 7.75 GB RAM** — under the 16 GB cap, left as-is). Started with `open -a Docker`. |
-| `.venv` | Homebrew **Python 3.14.7**, **terminal-bench 0.2.18** (latest on PyPI) + deps. CLI is `tb` (0.2.x renamed the old `tbench`); a compat shim at `.venv/bin/tbench` forwards to `tb`. |
-| Task catalog | `terminal-bench-core` **v0.1.1** (the launch set: 65 tasks per the registry; the sparse clone at `terminal-bench-core/tasks/` holds all 86 dirs of that branch). |
-| Curated images | 3 base images pulled + 5 small task images prebuilt = **~1.9 GB total** (≤10 GB budget). All boot-verified with a shell. |
-| Agent | `harness_stub.py` — `MadsStackAgent`, terminal-bench's `BaseAgent` driven by the `a2_loop/madsloop` runtime. Smoke: **PASS** (one real command round-trip in the hello-world sandbox, 7 s). |
+| Docker 守护进程 | Docker Desktop 4.96.1 / 引擎 **29.9.2** (aarch64, **16 CPU, 7.75 GB RAM** — 低于 16 GB 上限, 保持原样)。通过 `open -a Docker` 启动。 |
+| `.venv` | Homebrew **Python 3.14.7**, **terminal-bench 0.2.18** (PyPI 最新版) + 依赖。CLI 为 `tb` (0.2.x 将旧 `tbench` 改名); `.venv/bin/tbench` 兼容 shim 转发到 `tb`。 |
+| 任务目录 | `terminal-bench-core` **v0.1.1** (启动集: 按注册表的 65 个任务; 稀疏克隆 `terminal-bench-core/tasks/` 包含该分支全部 86 个目录)。 |
+| 精选镜像 | 拉取 3 个基础镜像 + 预构建 5 个小任务镜像 = **~1.9 GB 总计** (≤10 GB 预算)。全部通过 shell 启动验证。 |
+| Agent | `harness_stub.py` — `MadsStackAgent`, terminal-bench 的 `BaseAgent` 由 `a2_loop/madsloop` 运行时驱动。冒烟: **通过** (hello-world 沙箱中一次真实命令往返, 7 秒)。 |
 
-### Docker resources
-Docker Desktop VM: 16 CPU / 7.75 GB RAM (default on this Mac; host has 128 GB —
-if the full-stack phase wants headroom for bigger tasks, raise the RAM ceiling
-in Docker Desktop → Settings → Resources, **≤16 GB** per the resource budget;
-LM Studio + mlx-lm engines hold ~30–40 GB of the host).
+### Docker 资源
+Docker Desktop VM: 16 CPU / 7.75 GB RAM (本机默认; 主机有 128 GB —
+如果全栈阶段需要更大任务的余量, 在 Docker Desktop → 设置 → 资源中提高 RAM 上限, **≤16 GB** 按资源预算; LM Studio + mlx-lm 引擎占用主机约 30–40 GB)。
 
-### Task catalog
-- Dataset: `terminal-bench-core==0.1.1` (simple hand-crafted tasks) is checked
-  out locally at `terminal-bench-core/tasks/` — use `--dataset-path` to avoid
-  re-downloading (network here is slow; a 650 MB image pull took ~35 min).
-- The terminal-bench registry (fetched via `tb datasets list`) also offers
-  adapter datasets — `swebench-verified`, `swesmith`, `appworld-*`,
-  `mlebench-lite`, `quixbugs`, `usaco`, `algotune`, `aider-polyglot` — all
-  `head` versions, all much heavier than the core set.
-- Curated small tasks (simple bash/python, no ML/data-science):
+### 任务目录
+- 数据集: `terminal-bench-core==0.1.1` (简单手工任务) 已本地检出到 `terminal-bench-core/tasks/` — 使用 `--dataset-path` 避免重新下载 (本机网络慢; 650 MB 镜像拉取耗时 ~35 分钟)。
+- terminal-bench 注册表 (通过 `tb datasets list` 获取) 还提供适配器数据集 — `swebench-verified`, `swesmith`, `appworld-*`, `mlebench-lite`, `quixbugs`, `usaco`, `algotune`, `aider-polyglot` — 全部 `head` 版本, 全部比核心集重得多。
+- 精选小任务 (简单 bash/python, 无 ML/数据科学):
   `hello-world`, `count-dataset-tokens`, `grid-pattern-transform`,
   `organization-json-generator`, `fix-permissions`.
-  Avoid for small-VM runs: `train-fasttext`, `eval-mteb`, `hf-model-inference`,
+  小 VM 运行避免: `train-fasttext`, `eval-mteb`, `hf-model-inference`,
   `pytorch-model-cli`, `cartpole-rl-training`, `chess-best-move`, `qemu-*`,
   `build-*`, `swe-bench-*`, `solana-data`, `reshard-c4-data`, `intrusion-detection`.
 
-### Curated images (all boot-verified: shell + tmux + asciinema present)
-| Image | Size | Used by |
+### 精选镜像 (全部启动验证: shell + tmux + asciinema)
+| 镜像 | 大小 | 被谁使用 |
 |---|---|---|
-| `ghcr.io/laude-institute/t-bench/python-3-13:latest` | 265 MB | hello-world, count-dataset-tokens, grid-pattern-transform, org-json-generator (and most python tasks) |
-| `ghcr.io/laude-institute/t-bench/ubuntu-24-04:latest` | 206 MB | fix-permissions (and other bash tasks) |
+| `ghcr.io/laude-institute/t-bench/python-3-13:latest` | 265 MB | hello-world, count-dataset-tokens, grid-pattern-transform, org-json-generator (及大多数 python 任务) |
+| `ghcr.io/laude-institute/t-bench/ubuntu-24-04:latest` | 206 MB | fix-permissions (及其他 bash 任务) |
 | `ubuntu:latest` | 181 MB | git-multibranch |
-| `tb__hello-world__client:latest` | 265 MB | prebuilt task image |
-| `tb__count-dataset-tokens__client:latest` | 265 MB | prebuilt task image |
-| `tb__grid-pattern-transform__client:latest` | 265 MB | prebuilt task image |
-| `tb__organization-json-generator__client:latest` | 285 MB | prebuilt task image |
-| `tb__fix-permissions__client:latest` | 206 MB | prebuilt task image |
+| `tb__hello-world__client:latest` | 265 MB | 预构建任务镜像 |
+| `tb__count-dataset-tokens__client:latest` | 265 MB | 预构建任务镜像 |
+| `tb__grid-pattern-transform__client:latest` | 265 MB | 预构建任务镜像 |
+| `tb__organization-json-generator__client:latest` | 285 MB | 预构建任务镜像 |
+| `tb__fix-permissions__client:latest` | 206 MB | 预构建任务镜像 |
 
-The `tb__*` names are exactly what the harness computes at run time
-(`tb__<task_id>__client`), so runs can use `--no-rebuild` and start instantly.
-Rebuild any of them: `a5_stack/build_curated.sh` (rebuilds all 5 in ~15 s).
+`tb__*` 名称正是夹具在运行时计算的名称
+(`tb__<task_id>__client`), 所以运行可使用 `--no-rebuild` 并立即开始。
+重建其中任何一项: `a5_stack/build_curated.sh` (在 ~15 秒内重建全部 5 项)。
 
-## The harness contract (3 sentences)
-terminal-bench 0.2.18 drives an agent through
-`BaseAgent.perform_task(instruction, session, logging_dir)`, where `session`
-is a `TmuxSession` wrapping the task's docker container: the agent sends input
-with `session.send_keys([cmd, "Enter"], block=True)` (which waits on a
-`tmux wait -S done` marker) and reads results with
-`session.get_incremental_output()` / `capture_pane()`. The harness instantiates
-the agent from the CLI via `--agent-import-path module.path:ClassName` and
-`--agent-kwarg key=value`, then runs `perform_task` in an executor thread under
-`asyncio.wait_for(task.max_agent_timeout_sec)`, after which it executes the
-task's `run-tests.sh` in a fresh session and parses the pane for resolved/not.
-`MadsStackAgent` fulfils that interface by running the Mads-Loop `Agent`
-(OpenAI-chat loop: retry/backoff, sliding context, loop detection) whose only
-exposed tool is `bash`, rerouted from the host into the tmux session — the
-model therefore acts on the container's own terminal, and usage tokens map to
-`AgentResult`.
+## 夹具契约 (3 句话)
+terminal-bench 0.2.18 通过
+`BaseAgent.perform_task(instruction, session, logging_dir)` 驱动 Agent 执行
+任务, 其中 `session` 是包装任务 Docker 容器的 `TmuxSession`: Agent 以
+`session.send_keys([cmd, "Enter"], block=True)` 发送输入 (等待 `tmux wait -S done` 标记), 并通过
+`session.get_incremental_output()` / `capture_pane()` 读取结果。夹具通过
+`--agent-import-path module.path:ClassName` 和
+`--agent-kwarg key=value` 从 CLI 实例化 Agent, 然后在执行器线程下运行 `perform_task`
+在 `asyncio.wait_for(task.max_agent_timeout_sec)` 内, 之后在新生成的会话中执行
+任务的 `run-tests.sh` 并解析面板以判定 resolved/not。
+`MadsStackAgent` 通过运行 Mads-Loop `Agent`
+(OpenAI 聊天循环: 重试/退避, 滑动上下文, 死循环检测) 履行该接口, 其唯一暴露的工具是 `bash`, 从主机重定向到 tmux 会话 — 模型因此对容器自身的终端执行操作, 用量 token 映射到 `AgentResult`。
 
-## Exactly what the full-stack phase runs
+## 全栈阶段运行什么
 
-Precondition: A4's engine serving OpenAI chat completions on
-`http://localhost:8081/v1` — up via `a4_serve/serve.sh` (patched server:
-`/metrics` + the concurrency crash fix, so the agent's concurrent
-requests are safe).
+前提: A4 引擎在
+`http://localhost:8081/v1` 上提供 OpenAI 聊天补全 — 通过 `a4_serve/serve.sh` 启动 (补丁服务器:
+`/metrics` + 并发崩溃修复, 使 Agent 的并发请求安全)。
 
-Run one task:
+运行单个任务:
 ```bash
-cd /Users/fx/wk/github/cs2680-harvard        # repo root on sys.path for the import path
+cd /Users/fx/wk/github/cs2680-harvard        # sys.path 上的仓库根以导入路径
 export PYTHONPATH=$PWD
 a5_stack/.venv/bin/tbench run \
   --dataset-path a5_stack/terminal-bench-core/tasks \
   --task-id hello-world \
   --agent-import-path a5_stack.harness_stub:MadsStackAgent \
   --agent-kwarg base_url=http://localhost:8081/v1 \
-  --agent-kwarg model=<a4 model name> \
+  --agent-kwarg model=<a4 模型名> \
   --no-rebuild --no-cleanup \
   --output-path a5_stack/runs
 ```
-Run a suite (5 curated tasks):
+运行套件 (5 个精选任务):
 ```bash
 a5_stack/.venv/bin/tbench run \
   --dataset-path a5_stack/terminal-bench-core/tasks \
@@ -97,71 +85,60 @@ a5_stack/.venv/bin/tbench run \
   --task-id fix-permissions \
   --agent-import-path a5_stack.harness_stub:MadsStackAgent \
   --agent-kwarg base_url=http://localhost:8081/v1 \
-  --agent-kwarg model=<a4 model name> \
+  --agent-kwarg model=<a4 模型名> \
   --no-rebuild --no-cleanup --n-concurrent 1 \
   --output-path a5_stack/runs
 ```
-Harness sanity check that needs no LLM at all:
+无需 LLM 的夹具健康检查:
 ```bash
 a5_stack/.venv/bin/tbench run --dataset-path a5_stack/terminal-bench-core/tasks \
   --task-id hello-world --agent-name oracle --no-rebuild --no-cleanup --output-path a5_stack/runs
 ```
-Use `--no-cleanup` when you want the prebuilt images to survive the run
-(`--cleanup` deletes images with `compose down --rmi all`).
+使用 `--no-cleanup` 保留预构建镜像 (`--cleanup` 以 `compose down --rmi all` 删除镜像)。
 
-## First full-stack run (measured 2026-11-16, 11.2 min)
+## 首次全栈运行 (2026-11-16 实测, 11.2 分钟)
 
-The 5 curated tasks, real Docker sandboxes, A2 runtime driving the agent,
-1.5 B engine as the brain, `n-concurrent 1`:
+5 个精选任务, 真实 Docker 沙箱, A2 运行时驱动 Agent,
+1.5 B 引擎作为大脑, `n-concurrent 1`:
 
-| Task | Result |
+| 任务 | 结果 |
 |---|---|
-| `hello-world` | **resolved** — the 1.5 B model completed the task end-to-end in the sandbox |
-| `count-dataset-tokens` | unresolved (test timeout) |
-| `grid-pattern-transform` | unresolved (test timeout) |
-| `fix-permissions` | unresolved (test timeout) |
-| `organization-json-generator` | unresolved (test timeout) |
+| `hello-world` | **resolved** — 1.5 B 模型在沙箱中端到端完成任务 |
+| `count-dataset-tokens` | unresolved (测试超时) |
+| `grid-pattern-transform` | unresolved (测试超时) |
+| `fix-permissions` | unresolved (测试超时) |
+| `organization-json-generator` | unresolved (测试超时) |
 
-**Accuracy 1/5 (20%).** Honest reading: this is a *1.5 B* model — the
-floor, not the ceiling of the stack. hello-world proves the full path
-works (model → Mads-Loop retry/context loop → tmux terminal → real shell
-→ task tests → verdict). The other four need a model that can follow
-multi-step shell instructions; swapping the brain to the 35 B MoE (or
-27 B) via `--agent-kwarg` is the next experiment — the harness, images,
-and agent are all model-agnostic. Run output: `runs/2026-11-16__17-23-22/`
-(`results.json` + per-task dirs + `run.log`).
+**准确率 1/5 (20%)。** 诚实解读: 这是 *1.5 B* 模型 —
+地板, 不是栈的天花板。hello-world 证明了全路径畅通 (模型 → Mads-Loop 重试/上下文循环 → tmux 终端 → 真实 shell → 任务测试 → 判定)。其余四个需要能遵循多步 shell 指令的模型; 通过 `--agent-kwarg` 将大脑换为 35 B MoE (或 27 B) 是下一个实验 — 夹具、镜像和 Agent 全部与模型无关。运行输出: `runs/2026-11-16__17-23-22/`
+(`results.json` + 每任务目录 + `run.log`)。
 
-## Gaps the full-stack phase must close
-1. **A4 engine up on :8081** with the real model name — set
-   `--agent-kwarg model=...` (env `MADS_MODEL` also works; default
-   `qwen3.8-27b-splash`).
-2. **File tools**: the stub exposes only `bash` (file tools would hit the
-   host filesystem, not the container). Extend `TerminalToolExecutor` to
-   route read/write/edit/glob/grep through the session if richer behavior is
-   wanted — bash-only already solves file tasks.
-3. **RAM budget**: 7.75 GB VM; keep `--n-concurrent 1` and stay on the
-   curated small tasks unless Docker Desktop RAM is raised (≤16 GB).
-4. If you ever `pip install --force-reinstall terminal-bench`, the Python
-   3.14 compat patch re-applies automatically the next time `tbench` is
-   invoked (see below).
+## 全栈阶段必须关闭的缺口
+1. **A4 引擎在 :8081 上运行**, 使用真实模型名 — 设置
+   `--agent-kwarg model=...` (环境变量 `MADS_MODEL` 也有效; 默认
+   `qwen3.8-27b-splash`)。
+2. **文件工具**: 存根仅暴露 `bash` (文件工具会触及主机文件系统, 而非容器)。扩展 `TerminalToolExecutor` 以通过会话路由 read/write/edit/glob/grep — 仅 bash 已解决文件任务。
+3. **内存预算**: 7.75 GB VM; 保持 `--n-concurrent 1` 并停留在
+   精选小任务上, 除非提高 Docker Desktop RAM (≤16 GB)。
+4. 如果你 ever 执行 `pip install --force-reinstall terminal-bench`, Python
+   3.14 兼容补丁在下次 `tbench` 调用时自动重新应用 (见下文)。
 
-## Python 3.14 gotcha (fixed, documented)
-terminal-bench 0.2.18 defines CLI command functions named `list` in
-`terminal_bench/cli/tb/{runs,datasets}.py`. Python 3.14 (PEP 649) evaluates
-annotations lazily in module globals, so `list[str] | None` in other commands
-of the same module fails typer's resolution: *every* `tb` invocation died with
-`TypeError: 'function' object is not subscriptable`. `a5_stack/patch_terminal_bench.py`
-renames the shadowing functions (subcommand names preserved via explicit
-`name="list"`) and is applied idempotently by the `.venv/bin/tbench` shim.
-(There is no newer PyPI release that fixes it; 0.2.18 is current.)
+## Python 3.14 陷阱 (已修复, 已文档化)
+terminal-bench 0.2.18 在
+`terminal_bench/cli/tb/{runs,datasets}.py` 中定义了名为 `list` 的 CLI 命令函数。Python 3.14 (PEP 649) 在模块全局中惰性求值
+注解, 所以同一模块中其他命令的 `list[str] | None` 失败 typer 的解析: 每次 `tb` 调用以
+`TypeError: 'function' object is not subscriptable` 死亡。`a5_stack/patch_terminal_bench.py`
+重命名了阴影函数 (子命令名称通过显式
+`name="list"` 保留), 并由 `.venv/bin/tbench` shim 幂等应用。
+(没有更新的 PyPI 版本修复它; 0.2.18 是当前版本)。
 
-## Files
+## 文件
 - `harness_stub.py` — `MadsStackAgent` + `TerminalToolExecutor` + `smoke()`
-  (`python harness_stub.py smoke [--task X] [--rebuild]`).
-- `build_curated.sh` — rebuild the 5 curated task images.
-- `patch_terminal_bench.py` — idempotent 3.14 compat patch (invoked by the shim).
-- `terminal-bench-core/` — sparse clone of the v0.1.1 dataset branch
-  (tasks/, git-ignored; re-fetch: `git clone --filter=blob:none --sparse
+  (`python harness_stub.py smoke [--task X] [--rebuild]`)。
+- `build_curated.sh` — 重建 5 个精选任务镜像。
+- `patch_terminal_bench.py` — 幂等 3.14 兼容补丁 (由 shim 调用)。
+- `terminal-bench-core/` — v0.1.1 数据集分支的稀疏克隆
+  (tasks/, git-忽略; 重新获取: `git clone --filter=blob:none --sparse
   -b v0.1.1 https://github.com/laude-institute/terminal-bench-core` +
-  `git sparse-checkout set tasks` in it).
-- `.venv/` — Python 3.14 env; `bin/tb`, `bin/terminal-bench`, `bin/tbench` (shim).
+  `git sparse-checkout set tasks`)。
+- `.venv/` — Python 3.14 环境; `bin/tb`, `bin/terminal-bench`, `bin/tbench` (shim)。

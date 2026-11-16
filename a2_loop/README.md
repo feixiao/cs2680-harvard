@@ -1,109 +1,105 @@
-# a2_loop — Mads-Loop: a hand-written Agent Runtime (CS2680 A2)
+# a2_loop — Mads-Loop: 手写 Agent Runtime (CS2680 A2)
 
-No client framework: the whole loop is ~750 lines of ours
-(`madsloop/`), built on stdlib + `httpx` against the OpenAI-compatible
-endpoint the course provides (LM Studio on `localhost:1234`, or any
-OpenAI-compatible engine). One dependency; the agent is fully under our
-control, which is exactly what the hidden fault-injection tests probe.
+无需客户端框架：整个循环约 750 行代码（`madsloop/`），基于标准库 +
+`httpx` 对接课程提供的 OpenAI 兼容端点（LM Studio 在 `localhost:1234`
+，或任何 OpenAI 兼容引擎）。一个依赖；Agent 完全受我们控制，
+这正是隐藏故障注入测试所探测的目标。
 
-## The loop
+## 循环流程
 
 ```
-prompt ──▶ LLM (structured tool calls) ──▶ tool exec (subprocess, sandboxed
-    ▲                                       dir, timeout, env scrub) ──▶
-    └───── append result, next step ◀──────────────┘
+prompt ──▶ LLM (结构化工具调用) ──▶ 工具执行 (子进程, 沙箱化
+    ▲                                       目录, 超时, 环境变量清理) ──▶
+    └───── 追加结果, 下一步 ◀──────────────┘
 ```
 
-| Module | What it does |
+| 模块 | 作用 |
 |---|---|
-| `madsloop/client.py` | `LLMClient`: `httpx` async, JSON tool-call parsing (recovers from broken-JSON args by feeding the error back to the model), usage/cost accounting, **retry with exponential backoff + jitter on 5xx/timeouts, hard-fail on 4xx**, per-endpoint routing. `FaultyLLMClient`: the injected-fault harness (503-style bursts, optional hard-fail) used to prove robustness. |
-| `madsloop/agent.py` | The state machine: `submit → await model → run tools → … → done`. Owns the conversation, the step budget (`max_steps`), **loop detection** (same tool+args+result 3× ⇒ break out), and `AgentResult` accounting. |
-| `madsloop/context.py` | Context window manager: token budget (`max_context`), **sliding-window drop of oldest tool I/O**, optional **compaction** (ask the model to summarize the middle of history into one message — the course's compaction technique), stable-prefix pinning so the provider's KV cache can hit. |
-| `madsloop/tools.py` | 8 tools: `bash`, `write_file`, `read_file`, `list_dir`, `glob`, `grep`, `delete_file`, `done`. Each runs in the per-task working dir with a timeout and a scrubbed env. |
-| `madsloop/config.py` | Every knob in one `AgentConfig` (context size, compaction, keep-recent, backoff, per-tier endpoints, routing). |
-| `run.py` | Driver: 12-task terminal suite (`tasks.py`, same shape as `mads/workload.py`), concurrent or serial, writes `results/<tag>.json` with per-task + aggregate METRIC lines. |
-| `tasks.py` | 12 deterministic tasks (sum-file, off-by-one fix, csv→json, fizzbuzz, log-parse, jsonl-agg, …), each with a real pass/fail grader (file checks, `python -m unittest`, output diffs). |
+| `madsloop/client.py` | `LLMClient`: `httpx` 异步, JSON 工具调用解析 (从损坏的 JSON 参数恢复, 将错误反馈给模型), 用量/费用核算, **5xx/超时指数退避 + 抖动重试, 4xx 硬失败**, 每端点路由。`FaultyLLMClient`: 注入故障的测试夹具 (503 风格突发, 可选硬失败), 用于证明鲁棒性。 |
+| `madsloop/agent.py` | 状态机: `submit → await model → run tools → … → done`。管理对话、步骤预算 (`max_steps`)、**死循环检测** (相同工具+参数+结果出现 3 次 ⇒ 跳出), 以及 `AgentResult` 核算。 |
+| `madsloop/context.py` | 上下文窗口管理器: token 预算 (`max_context`)、**滑动窗口丢弃最旧工具 I/O**、可选 **压缩** (要求模型将历史中间部分总结为一条消息——课程中的压缩技术)、稳定前缀锁定以命中提供方的 KV 缓存。 |
+| `madsloop/tools.py` | 8 种工具: `bash`, `write_file`, `read_file`, `list_dir`, `glob`, `grep`, `delete_file`, `done`。每种在每任务工作目录下运行, 带超时和清理后的环境变量。 |
+| `madsloop/config.py` | 所有旋钮集中于一处 `AgentConfig` (上下文大小、压缩、保留最近、退避、每端点路由)。 |
+| `run.py` | 驱动: 12 任务终端套件 (`tasks.py`, 与 `mads/workload.py` 同形状), 并发或串行, 写入 `results/<tag>.json` (含每任务 + 聚合 METRIC 行)。 |
+| `tasks.py` | 12 个确定性任务 (sum-file, off-by-one 修复, csv→json, fizzbuzz, 日志解析, jsonl-聚合, …), 各有真实通过/失败评分器 (文件检查, `python -m unittest`, 输出差异)。 |
 
-## Run it
+## 运行
 
 ```sh
 cd a2_loop
-# the course's engine (LM Studio):
+# 课程的引擎 (LM Studio):
 .venv/bin/python run.py --tag base --concurrency 1
-# any OpenAI-compatible engine / model:
+# 任意 OpenAI 兼容引擎/模型:
 .venv/bin/python run.py --tag mx --concurrency 1 \
   --base-url http://localhost:8084/v1 --model <id> \
-  --fault-rate 0.2            # inject transient faults to prove robustness
+  --fault-rate 0.2            # 注入瞬态故障以证明鲁棒性
 ```
 
-## Measured on this machine (2026-11-16)
+## 本机实测 (2026-11-16)
 
-Same 12 tasks, same agent, three engine configurations:
+相同的 12 个任务, 相同的 Agent, 三种引擎配置:
 
-| Config | Model / engine | Solved | Wall | Tokens | Cache reads | Tool calls | Cost (equiv.) |
+| 配置 | 模型/引擎 | 解决 | 耗时 | Token | 缓存命中 | 工具调用 | 费用 (等值) |
 |---|---|---|---|---|---|---|---|
-| `baseline` | Qwen3.6-35B-A3B on **mlx-lm** (:8084, prompt cache 16 GB) | **12/12** | 241 s | 65.5 k | **53.4 k** | 3,947 | **$0.0125** |
+| `baseline` | Qwen3.6-35B-A3B on **mlx-lm** (:8084, 提示缓存 16 GB) | **12/12** | 241 s | 65.5 k | **53.4 k** | 3,947 | **$0.0125** |
 | `compare27` | Qwen3.8-27B on **LM Studio** (:1234) | **12/12** | 694 s | 57.2 k | 0 | 3,538 | $0.1062 |
-| `fault` | Qwen3.6-35B on LM Studio, **20 % injected faults** | 10/12 * | 55 s | 56.9 k | 0 | 2,197 | $0.0101 |
+| `fault` | Qwen3.6-35B on LM Studio, **20 % 注入故障** | 10/12 * | 55 s | 56.9 k | 0 | 2,197 | $0.0101 |
 
-\* the 2 non-completers are an environment artifact, not a loop failure:
-both died at step 0 with `400 Failed to load model … Operation canceled`
-— LM Studio (single local engine) was mid model-swap while serving our
-session's 27B model. That is a genuine 4xx, and the loop correctly treated
-it as fatal instead of retrying a dead model. Every task that reached a
-live model under 20 % fault injection **completed** (10/10), with
-**28 injected faults, all recovered** by the backoff retry (per-task retry
-counts 0–10; the fault bursts are 503-style: fail ≤3 consecutive times,
-then let the call through — the flaky-network shape from lecture 1).
+* 两个未完成任务是环境产物, 非循环失败:
+  两者在步骤 0 以 `400 Failed to load model … Operation canceled` 死亡
+  — LM Studio (单本地引擎) 正进行模型切换同时为我们会话的 27B 模型
+  提供服务。这是一个真正的 4xx, 循环正确地将其视为致命而非重试
+  一个死掉的模型。所有在 20 % 故障注入下到达活模型的完成任务
+  **全部完成** (10/10), **28 个注入故障全部恢复** (每任务重试
+  计数 0–10; 故障突发为 503 风格: 连续失败 ≤3 次后放行 — 来自
+  第 1 讲的可疑网络形状)。
 
-Readings:
+读数:
 
-- **Same model, different engine, 3× the speed**: mlx-lm's
-  `--prompt-cache-bytes` gave 53 k cache-read tokens (the agent's stable
-  prefix is re-prefilled for free); LM Studio reported no cache hits.
-  27B-on-LM-Studio cost 8.5× more. This is the single biggest A2 finding —
-  the serving engine is part of the agent stack, which is where A3/A4 go.
-- **Token shape of an agentic run**: input is tiny (12 k over 12 tasks —
-  the context manager keeps prompts bounded) while output/tool traffic
-  dominates; cost tracks output tokens, which is why A3's routing lever
-  (cheap model for routine steps) targets exactly that.
-- **Tool calls are the workhorse**: ~3.5 k calls for 57 steps; every
-  result lands in context and the window manager is what keeps the 32 k
-  budget honest across 5–14 step tasks.
+- **同模型, 不同引擎, 3× 速度**: mlx-lm 的
+  `--prompt-cache-bytes` 给出了 53 k 缓存命中 token (Agent 的稳定
+  前缀免费重新预填充); LM Studio 报告无缓存命中。
+  27B on LM Studio 费用高 8.5 倍。这是 A2 最重要的发现——
+  服务引擎是 Agent 栈的一部分, 也是 A3/A4 的方向。
+- **Agent 运行的 Token 形态**: 输入很小 (12 个任务共 12 k token —
+  上下文管理器保持提示有界), 而输出/工具流量占主导; 费用跟踪
+  输出 token, 这也是 A3 的路由杠杆 (常规步骤使用便宜模型)
+  针对的目标。
+- **工具调用是核心工作**: ~3.5 k 次调用处理 57 步; 每个
+  结果进入上下文, 窗口管理器是保持 32 k 预算在 5–14 步任务中
+  合理的机制。
 
-## Robustness notes (what the hidden tests will hit, and the answers)
+## 鲁棒性说明 (隐藏测试将触及的内容及回答)
 
-1. **5xx / timeout** → retry with exponential backoff + jitter
-   (0.4 s → 0.8 → 1.6 → … → 20 s cap), `max_retries` per step; the task
-   continues. Proven above (28/28 recovered).
-2. **4xx** → fatal for the step; task recorded `FAILED_ERROR`, run
-   continues (per-task isolation), no retry storm.
-3. **Empty / malformed completions** → the client treats an empty
-   `content` + no tool calls as a retryable degenerate response (bounded),
-   and broken JSON in `tool_calls[].arguments` is recovered by feeding the
-   model the parse error rather than crashing the loop.
-4. **Infinite loops** → 3 identical consecutive (tool, args, result)
-   triples break the step with a synthetic "you are repeating yourself"
-   message; `max_steps` caps the whole run. Neither fired in the 12-task
-   baseline (0 loop breaks), but both are on the fault paths' blast radius.
-5. **Per-task isolation** → one task's crash never touches another's
-   client/context/sandbox; the aggregate gate is per-task.
+1. **5xx / 超时** → 指数退避 + 抖动重试
+   (0.4 s → 0.8 → 1.6 → … → 20 s 上限), 每步 `max_retries`; 任务
+   继续。上述已验证 (28/28 恢复)。
+2. **4xx** → 步骤致命; 任务记录 `FAILED_ERROR`, 运行
+   继续 (每任务隔离), 无重试风暴。
+3. **空/畸形补全** → 客户端将空的
+   `content` + 无工具调用视为可重试的退化响应 (有界), 损坏的 JSON
+   `tool_calls[].arguments` 通过向模型反馈解析错误而非崩溃循环来恢复。
+4. **无限循环** → 3 次连续相同的 (工具, 参数, 结果)
+   三元组以合成消息"你在重复自己"跳出步骤; `max_steps` 限制整个运行。两者在 12 任务
+   基线中未触发 (0 次循环跳出), 但两者都在故障路径的爆炸半径内。
+5. **每任务隔离** → 一个任务的崩溃从不影响另一个的
+   客户端/上下文/沙箱; 聚合门控为每任务。
 
-## Experiment-integrity note (found while verifying)
+## 实验完整性说明 (验证时发现)
 
-The first fault run reported `retries=0` at a 20 % injection rate —
-impossible. Root cause: every task's fault RNG was seeded identically
-(`Random(0)`), and that stream's first dozen draws all exceed 0.2, so no
-task ever rolled a fault; the "fault run" was a second clean run. Fixed
-with per-task distinct seeds (`seed*7919+task_index`) and the fixed run
-shows the expected ~20 % hit rate. Lesson: an injected-fault harness must
-be verified by its own counters, not by the run completing.
+首次故障运行在 20 % 注入率时报告 `retries=0`——
+不可能。根因: 每个任务的故障 RNG 种子相同
+(`Random(0)`), 该流的前十几个抽取都超过 0.2, 所以没有
+任务抛出故障; "故障运行"实际上是第二个干净运行。修复为
+每任务不同种子 (`seed*7919+task_index`), 修复后的运行
+显示预期的 ~20 % 命中率。教训: 注入故障夹具必须
+用自己的计数器验证, 而非依赖运行完成。
 
-## Files
+## 文件
 
-- `madsloop/` — the runtime (client, agent, context, tools, config)
-- `run.py` — driver (args: `--tag --concurrency --model --base-url
+- `madsloop/` — 运行时 (client, agent, context, tools, config)
+- `run.py` — 驱动 (参数: `--tag --concurrency --model --base-url
   --fault-rate --tasks --compact --max-ctx --keep-recent --router …`)
-- `tasks.py` — the 12-task suite + graders
-- `results/*.json` — full per-task runs (baseline / compare27 / fault)
-- `full_runs.sh` — the three configurations above, in order
+- `tasks.py` — 12 任务套件 + 评分器
+- `results/*.json` — 完整每任务运行 (baseline / compare27 / fault)
+- `full_runs.sh` — 上述三种配置, 依次运行
