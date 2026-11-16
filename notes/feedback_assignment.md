@@ -84,17 +84,17 @@ A1 期间 agent 大量用 Bash 而非原生工具——幻灯片的回答:**Anth
 
 > **图示** 两张实验图显示该 prompt 能**显著增加 Bash 使用率**,且 reminder 在会话**中途**插入时 Bash 用量立刻跳变——系统提示里的几行话即可改变 agent 的整个工具习惯。
 
-## Assignment 4 回顾
+## Assignment 4 回顾(注:PPT 标题标注为 Assignment 4,内容实际对应 Assignment 3 竞赛的 26 题/4h 设定)
 
 - 评审规模:
   - 共 **26 个任务**,最佳成绩解出 **20 个**
-  - 课程对 top 18 中的 **15 份提交各评审 10 次**("18 submissions from 12 students, 180 gradings")
+  - 课程对 top 18 的 **18 份提交各评审 10 次**(来自 12 名学生的 18 份提交,共 180 次评测:"18 submissions from 12 students, 180 gradings")
   - 所有运行受 **4 小时**端到端上限约束
 - 观察:
   - **方差取决于 harness(Variance depends on harness),但方差不会掩盖一个好的 harness**
   - 同一提交的多次运行结果**聚簇(clustered)**——同一 harness 之间接近、不同 harness 之间差异明显
 
-> **图示** 散点图(y 轴为解题数,x 轴为 Submission ID,每点一次评分);第二页把 18 份提交以两列网格(A1…L)列出。
+> **图示** 散点图(y 轴为解题数,x 轴为 Submission ID,每点一次评分);第二页把 18 份提交以两列网格(A1…L 共 18 个)列出。
 
 ## 三次作业中 Claude Code 使用量的变化
 

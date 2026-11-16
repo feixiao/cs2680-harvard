@@ -79,12 +79,12 @@ Multi-agent 并不新(有数十年研究史,本讲不展开历史),而是把它�
 |Category|Architecture|Core idea|Best for|Weakness|
 |---|---|---|---|---|
 |Centralized|Supervisor–worker|One planner, many workers|Separable subtasks|Planner bottleneck|
-|Hierarchical|Supervisors of supervisors|Recursive splits|Errors amplify||
-|Pipeline / DAG|Each stage feeds the next|Clear ordered stages|Errors propagate||
-|Market / auction|Agents bid for tasks|Dynamic allocation|Bad bids||
+|Centralized|Hierarchical|Supervisors of supervisors|Recursive splits|Errors amplify|
+|Centralized|Pipeline / DAG|Each stage feeds the next|Clear ordered stages|Errors propagate|
+|Centralized|Market / auction|Agents bid for tasks|Dynamic allocation|Bad bids|
 |Decentralized|Blackboard|Shared workspace|One shared artifact|Stale state|
-|Committee / debate|Answer, then reconcile|Judgment calls|Groupthink||
-|Swarm|Direct talk, no controller|Local negotiation|O(n²) messages||
+|Decentralized|Committee / debate|Answer, then reconcile|Judgment calls|Groupthink|
+|Decentralized|Swarm|Direct talk, no controller|Local negotiation|O(n²) messages|
 |Hybrid|Dynamic topology|Rewires as work proceeds|Unknown structure|Hard to debug|
 
 ## 任务分解(Task decomposition)
