@@ -1,48 +1,21 @@
-# CS2680 幻灯片摘要
-
-本仓库是对哈佛 CS2680《Modern AI Systems: Agents and System Optimizations》(Modern AI 系统:智能体与系统优化,主讲:Juncheng Yang)课程幻灯片的个人学习笔记。
-
-- [CS2680-学习材料.md](CS2680-学习材料.md) — 完整中文学习笔记:14 周路线、五个作业、Part I/II 核心概念速记、全栈技术层级图、mads/ 参照实现说明、学习路线建议
-- 每个 PDF 对应的中文简化总结(按章节提炼要点,非逐页翻译):[notes/](notes/)
-- 参照实现:`mads/` 包 —— 确定性模拟的 Mads 全栈(Agent Loop / 上下文 / 批处理 / 分页 KV / 投机解码),五个作业各对应一个模块
-- 基准:`bash autoresearch.sh` 跑 16 任务工作负载并打印 METRIC 行(主指标 `e2e_latency_s`,正确性门 16/16 任务完成)
-
-## 五个作业的真实实现(本机,2026-11-16)
-
-| 目录 | 作业 | 交付物 | 实测结果 |
-|---|---|---|---|
-| `a1_lens/` | Mads-Lens | Claude Code 会话 JSONL 的只读 Web UI(纯 stdlib + 单页 SPA):工具调用轨迹、子 agent 树、错误定位、每次调用 5 类 token/成本 | 本机 `~/.claude` 会话树全量解析,`python3 a1_lens/server.py` 即起 |
-| `a2_loop/` | Mads-Loop | 手写 Agent Runtime(`madsloop/`,~750 行):结构化工具调用、上下文窗口/压缩、5xx 退避重试(4xx 致命)、死循环检测、12 任务终端套件 | 12/12 全过;20% 注入故障 28/28 恢复;同模型 mlx 引擎比 LM Studio 快 2.9×、省 8.5×(前缀缓存) |
-| `a3_opt/` | Mads-Opt | `experiments.py`(真实引擎消融 + `--sim` 确定性 6 点扫描)+ 技术复盘博客 `blog.md` | 路由 31× 成本、并发 9.1× 延迟、全栈 112× 延迟 / 135× 成本,成功率不降 |
-| `a4_serve/` | Mads-Serve | mlx-lm 引擎 + 409 行补丁(/metrics、分页 KV 镜像、**并发 bug 根因修复**)+ 合成负载基准 + 块级前缀缓存 `kv_cache.py` | 共享前缀 TTFT 9–34.5×(N=8 312ms vs 10.8s);N=8 吞吐 +1.9×、尾部延迟 −28%;内存 18GB vs 8GB |
-| `a5_stack/` | Mads-Stack | Terminal-Bench 0.2.18(修了 Python 3.14 兼容 bug)+ terminal-bench-core 65 任务集 + Mads-Loop 驱动的 `MadsStackAgent`(真实 Docker 沙箱 + tmux 终端) | 5 任务 suite 实跑 **1/5(20%)** @1.5B 脑;hello-world 全栈端到端跑通,换 35B/27B 是下一个实验 |
-
-每个目录自带 README(架构、运行命令、实测数据)。
-
-## 课程链接
-
-- 课程主页:https://cs2680.com
-- 备用课程域名(幻灯片页脚中显示):https://course.agentic-system.org
-- 智能体评测笔记:https://cs2680.com/notes/agent-evaluation
-
 ## 幻灯片
 
 原始幻灯片 PDF 经讲师许可收录在本仓库。
 
 | 讲次 | PDF | 中文笔记 |
 |---|---|---|
-| 1. 课程导论 | [1_intro.pdf](1_intro.pdf) | [notes/1_intro.md](notes/1_intro.md) |
-| 2. 用户视角的智能体 I | [2_agent_use_1.pdf](2_agent_use_1.pdf) | [notes/2_agent_use_1.md](notes/2_agent_use_1.md) |
-| 3. 用户视角的智能体 II | [3_agent_use_2.pdf](3_agent_use_2.pdf) | [notes/3_agent_use_2.md](notes/3_agent_use_2.md) |
-| 4. 智能体设计 I | [4_agent_design_1.pdf](4_agent_design_1.pdf) | [notes/4_agent_design_1.md](notes/4_agent_design_1.md) |
-| 5. 智能体设计 II | [5_agent_design_2.pdf](5_agent_design_2.pdf) | [notes/5_agent_design_2.md](notes/5_agent_design_2.md) |
-| 6. 智能体设计 III | [6_agent_design_3.pdf](6_agent_design_3.pdf) | [notes/6_agent_design_3.md](notes/6_agent_design_3.md) |
-| 7. 智能体设计 IV | [7_agent_design_4.pdf](7_agent_design_4.pdf) | [notes/7_agent_design_4.md](notes/7_agent_design_4.md) |
-| 8. 智能体设计 V | [8_agent_design_5.pdf](8_agent_design_5.pdf) | [notes/8_agent_design_5.md](notes/8_agent_design_5.md) |
-| 作业 3 | [8_assignment3.pdf](8_assignment3.pdf) | [notes/8_assignment3.md](notes/8_assignment3.md) |
-| 9. LLM 服务基础 I | [9_llm_serving_basics_1.pdf](9_llm_serving_basics_1.pdf) | [notes/9_llm_serving_basics_1.md](notes/9_llm_serving_basics_1.md) |
-| 10a. LLM 服务基础 IIa | [10_llm_serving_basics_2a.pdf](10_llm_serving_basics_2a.pdf) | [notes/10_llm_serving_basics_2a.md](notes/10_llm_serving_basics_2a.md) |
-| 10b. LLM 服务基础 IIb(引介 GPU) | [10_llm_serving_basics_2b.pdf](10_llm_serving_basics_2b.pdf) | [notes/10_llm_serving_basics_2b.md](notes/10_llm_serving_basics_2b.md) |
-| 11. LLM 服务基础 III | [11_llm_serving_basics_3.pdf](11_llm_serving_basics_3.pdf) | [notes/11_llm_serving_basics_3.md](notes/11_llm_serving_basics_3.md) |
-| 作业 4 | [assignment4.pdf](assignment4.pdf) | [notes/assignment4.md](notes/assignment4.md) |
-| 作业反馈讲次 | [feedback_assignment.pdf](feedback_assignment.pdf) | [notes/feedback_assignment.md](notes/feedback_assignment.md) |
+| 1. 课程导论 | [1_intro.pdf](1_intro.pdf) | [notes/1_intro.md](notes/1_intro.md) — prefill 算力受限 vs decode 带宽受限；Agent 是"新计算机"，真正优化目标是 $/successful task |
+| 2. 用户视角的智能体 I | [2_agent_use_1.pdf](2_agent_use_1.pdf) | [notes/2_agent_use_1.md](notes/2_agent_use_1.md) — agentic loop 四步；记忆(CLAUDE.md/auto memory)把一次性指令变长期惯例；Skill/MCP/Hook/Plugin 四种扩展机制 |
+| 3. 用户视角的智能体 II | [3_agent_use_2.pdf](3_agent_use_2.pdf) | [notes/3_agent_use_2.md](notes/3_agent_use_2.md) — Superpowers/Caveman 两个案例；手工并行/subagent/team/dynamic workflow 四条规模化路径；不确定性是核心主题 |
+| 4. 智能体设计 I | [4_agent_design_1.pdf](4_agent_design_1.pdf) | [notes/4_agent_design_1.md](notes/4_agent_design_1.md) — Agent = Model × Harness；ReAct 三要素；上下文四杠杆(Admission/Offloading/Transformation/Compaction)按无损到有损排序 |
+| 5. 智能体设计 II | [5_agent_design_2.pdf](5_agent_design_2.pdf) | [notes/5_agent_design_2.md](notes/5_agent_design_2.md) — 三张图(控制/任务/通信)刻画八种架构；任务分解六轴八要素；多智能体继承分布式系统六大难题，A2A 与 MCP 两个协议分层叠加 |
+| 6. 智能体设计 III | [6_agent_design_3.pdf](6_agent_design_3.pdf) | [notes/6_agent_design_3.md](notes/6_agent_design_3.md) — 记忆六阶段流水线(写/格式/后端/检索/反思/遗忘)；可靠性从误差复合出发，故障分五层(spec/harness/model/tool/env)，为失败而设计 |
+| 7. 智能体设计 IV | [7_agent_design_4.pdf](7_agent_design_4.pdf) | [notes/7_agent_design_4.md](notes/7_agent_design_4.md) — 组件级 vs 端到端评测；八大基准(GAIA/BFCL/WebArena/OSWorld/SWE-bench/τ-bench/Terminal-Bench/TheAgentCompany)对比；数据泄漏四层与基准快速饱和 |
+| 8. 智能体设计 V | [8_agent_design_5.pdf](8_agent_design_5.pdf) | [notes/8_agent_design_5.md](notes/8_agent_design_5.md) — 成本分解公式(用户×会话×轮次×步数×token×单价)逐项压缩；三种架构(单体/模块化/微内核)对比；优化是"跑→度量→改一件事→复评"的循环 |
+| 作业 3 | [8_assignment3.pdf](8_assignment3.pdf) | [notes/8_assignment3.md](notes/8_assignment3.md) — 26 任务、三档模型路由；时间(35 min/evaluate, 4 h 总计)与成本(每天 $30)双重限制；按解题数/每题成本/每题时间三维天际线排名 |
+| 9. LLM 服务基础 I | [9_llm_serving_basics_1.pdf](9_llm_serving_basics_1.pdf) | [notes/9_llm_serving_basics_1.md](notes/9_llm_serving_basics_1.md) — 请求六阶段(Tokenize→Schedule→Prefill→Decode→Detokenize→Stream)；Llama 3 系统估算(权重 141 GB/KV 320 KB/token)；MoE 解耦内存与算力 |
+| 10a. LLM 服务基础 IIa | [10_llm_serving_basics_2a.pdf](10_llm_serving_basics_2a.pdf) | [notes/10_llm_serving_basics_2a.md](notes/10_llm_serving_basics_2a.md) — GPU 是吞吐机器，SIMT 按单线程编程，Roofline 脊点(H200 206 FLOP/B)分隔内存/计算受限；decode 强度≈1 FLOP/B 只跑峰值 0.5% |
+| 10b. LLM 服务基础 IIb | [10_llm_serving_basics_2b.pdf](10_llm_serving_basics_2b.pdf) | [notes/10_llm_serving_basics_2b.md](notes/10_llm_serving_basics_2b.md) — MFU/MBU 双指标剖析；kernel 优化(融合/FlashAttention/持久 kernel/Split-KV/CUDA Graphs/PDL)；跨 GPU 通信(Flux/DeepEP) |
+| 11. LLM 服务基础 III | [11_llm_serving_basics_3.pdf](11_llm_serving_basics_3.pdf) | [notes/11_llm_serving_basics_3.md](notes/11_llm_serving_basics_3.md) — 连续批处理与选择性批处理；调度(FCFS/chunked prefill/PD 分离/SJF)；PagedAttention 与前缀缓存；五种并行(DP/TP/PP/EP/SP)及通信代价 |
+| 作业 4 | [assignment4.pdf](assignment4.pdf) | [notes/assignment4.md](notes/assignment4.md) — 自持 SGLang serving 引擎作为 Agent 后端，先度量后优化，一次只改一个方案，禁止换模型；评分 = 端到端时间 + 解出任务数 |
+| 作业反馈讲次 | [feedback_assignment.pdf](feedback_assignment.pdf) | [notes/feedback_assignment.md](notes/feedback_assignment.md) — Claude Code 使用量增长 4.5–7×，失败多由学生自己发现；十大陷阱(P1–P10)与六步迭代循环(本地测试→基线→一处改动→验证→复评) |
